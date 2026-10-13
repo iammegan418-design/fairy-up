@@ -7,7 +7,6 @@
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="icon" type="image/png" href="./apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -73,7 +72,7 @@ h3{font-size:1rem;margin:0 0 8px}
 .panel{background:var(--paper);border:1px solid var(--line);box-shadow:0 6px 20px rgba(156,134,230,.08);border-radius:20px;padding:16px;margin-bottom:14px}
 .muted{color:var(--soft);font-size:.88rem}
 label{display:block;font-size:.85rem;color:var(--soft);margin:12px 0 5px}
-input[type=text],input[type=number],input[type=date],select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:1rem}
+input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:1rem}
 textarea{min-height:70px;resize:vertical}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer;background:var(--ink);color:var(--bg);font-size:.98rem}
@@ -179,6 +178,7 @@ footer{text-align:center;font-size:.78rem;color:var(--soft);padding:10px 0 30px}
 <footer>巧穎開發｜仙女團隊</footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -203,54 +203,123 @@ async function copyText(t){
   ta.remove();
 }
 
-/* ---------- state ---------- */
-const S={ready:false,mode:'local',classId:null,cls:null,members:{},tab:'checkin',
-  sel:'',addOpen:false,draft:{date:today(),videos:0,followers:'',note:''},newMember:{mode:1},
-  chartSel:'all',guideSel:'',ai:null,aiBusy:false,aiTopic:'',aiGoal:'漲粉曝光',editing:null,canWrite:true};
+/* ---------- Supabase 設定（只用 Publishable Key，不可放 Secret Key） ---------- */
+const SUPABASE_URL='https://cfrxiktneofytsffknww.supabase.co';
+const SUPABASE_KEY='sb_publishable_n4jbJpR7WujZNDeLlS6n6w_Cmy1LvqF';
+const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 
-/* ---------- storage: db when available, otherwise this device ---------- */
-let store=null;
-const LocalStore={
-  key:'fairy-ascend-v1',
-  read(){try{return JSON.parse(localStorage.getItem(this.key))||{meta:{},classes:{},members:{}}}catch(e){return{meta:{},classes:{},members:{}}}},
-  write(d){try{localStorage.setItem(this.key,JSON.stringify(d))}catch(e){}},
-  init(){this.sync()},
-  sync(){const d=this.read();S.classId=d.meta.classId||null;S.cls=S.classId?d.classes[S.classId]||null:null;S.members=S.classId?(d.members[S.classId]||{}):{};S.ready=true;render()},
-  async saveClass(cid,data,current){const d=this.read();d.classes[cid]=data;if(current)d.meta.classId=cid;d.members[cid]=d.members[cid]||{};this.write(d);this.sync()},
-  async saveMember(mid,data){const d=this.read();(d.members[S.classId]=d.members[S.classId]||{})[mid]=data;this.write(d);this.sync()},
-  async deleteMember(mid){const d=this.read();delete (d.members[S.classId]||{})[mid];this.write(d);this.sync()}
-};
-function DbStore(db){
-  let uc=null,um=null;
-  const meta=db.doc('meta/current');
-  function sw(cid){
-    if(uc)uc();if(um)um();uc=um=null;
-    S.classId=cid;S.cls=null;S.members={};
-    if(!cid){S.ready=true;render();return}
-    uc=db.doc('classes/'+cid).onSnapshot(s=>{S.cls=s.exists?s.data():null;S.ready=true;render()},onErr);
-    um=db.collection('classes/'+cid+'/members').onSnapshot(q=>{const m={};q.docs.forEach(d=>m[d.id]=d.data());S.members=m;render()},onErr);
+/* ---------- state ---------- */
+const S={ready:false,user:null,isAdmin:false,loadErr:false,fatal:'',authMode:'login',authEmail:'',lastProfile:null,
+  classId:null,cls:null,members:{},tab:'checkin',
+  sel:'',addOpen:false,draft:{date:today(),videos:0,followers:'',note:''},newMember:{mode:1},
+  chartSel:'all',guideSel:'',ai:null,aiBusy:false,aiTopic:'',aiGoal:'漲粉曝光',editing:null};
+
+/* ---------- cloud storage ---------- */
+const toCls=r=>r?{name:r.name,start:r.start_date,end:r.end_date,createdAt:r.created_at}:null;
+const toMem=r=>({name:r.name,upline:r.upline||'',mode:Number(r.mode)||1,base:Number(r.base)||0,logs:r.logs||{},userId:r.user_id,createdAt:r.created_at});
+function myId(){const e=Object.entries(S.members).find(([,m])=>S.user&&m.userId===S.user.id);return e?e[0]:''}
+function fail(error){if(error)throw error}
+function mustHit(data){if(!data||!data.length)throw{code:'denied'}}
+const Cloud={
+  chan:null,t:null,
+  async load(){
+    const {data:c,error:e1}=await sb.from('fairy_classes').select('*').eq('is_current',true).order('created_at',{ascending:false}).limit(1);fail(e1);
+    const row=c&&c[0],members={};
+    if(row){const {data:m,error:e2}=await sb.from('fairy_members').select('*').eq('class_id',row.id);fail(e2);m.forEach(r=>members[r.id]=toMem(r))}
+    S.classId=row?row.id:null;S.cls=toCls(row);S.members=members;S.ready=true;S.loadErr=false;
+    const mine=myId();
+    if(!S.isAdmin)S.sel=mine;
+    else if(S.sel&&!S.members[S.sel])S.sel='';
+    if(!mine&&S.lastProfile&&!S.newMember.name){const p=S.lastProfile;S.newMember={name:p.name||'',upline:p.upline||'',mode:Number(p.mode)||1}}
+    render();this.listen();
+  },
+  listen(){
+    if(this.chan)return;
+    this.chan=sb.channel('fairy-sync')
+      .on('postgres_changes',{event:'*',schema:'public',table:'fairy_members'},()=>this.soon())
+      .on('postgres_changes',{event:'*',schema:'public',table:'fairy_classes'},()=>this.soon())
+      .subscribe();
+  },
+  stop(){if(this.chan){sb.removeChannel(this.chan);this.chan=null}},
+  soon(){clearTimeout(this.t);this.t=setTimeout(()=>{if(S.user)this.load().catch(onLoadErr)},500)},
+  async newClass(d){
+    const {error:e1}=await sb.from('fairy_classes').update({is_current:false}).eq('is_current',true);fail(e1);
+    const {error}=await sb.from('fairy_classes').insert({name:d.name,start_date:d.start,end_date:d.end,is_current:true});fail(error);
+    await this.load();
+  },
+  async saveClass(d){
+    const {data,error}=await sb.from('fairy_classes').update({name:d.name,start_date:d.start,end_date:d.end}).eq('id',S.classId).select('id');fail(error);mustHit(data);
+    await this.load();
+  },
+  async addMember(d){
+    const {data,error}=await sb.from('fairy_members').insert({class_id:S.classId,user_id:S.user.id,name:d.name,upline:d.upline,mode:d.mode,base:d.base}).select('id').single();fail(error);
+    await this.load();return data.id;
+  },
+  async updateMember(id,f){
+    const {data,error}=await sb.from('fairy_members').update({name:f.name,upline:f.upline,mode:f.mode,base:f.base,updated_at:new Date().toISOString()}).eq('id',id).select('id');fail(error);mustHit(data);
+    await this.load();
+  },
+  async checkin(id,day,entry){
+    const {error}=await sb.rpc('fairy_checkin',{p_member:id,p_day:day,p_entry:entry});fail(error);
+    await this.load();
+  },
+  async deleteMember(id){
+    const {data,error}=await sb.from('fairy_members').delete().eq('id',id).select('id');fail(error);mustHit(data);
+    await this.load();
   }
-  function onErr(e){if(e&&e.code==='revoked'){S.canWrite=false;render()}}
-  return{
-    init(){meta.onSnapshot(s=>{const cid=s.exists?(s.data().classId||null):null;if(cid!==S.classId||!S.ready)sw(cid)},e=>{onErr(e);S.ready=true;render()})},
-    async saveClass(cid,data,current){await db.doc('classes/'+cid).set(data);if(current)await meta.set({classId:cid})},
-    async saveMember(mid,data){await db.doc(`classes/${S.classId}/members/${mid}`).set(data)},
-    async deleteMember(mid){await db.doc(`classes/${S.classId}/members/${mid}`).delete()}
-  };
-}
+};
+function onLoadErr(e){console.error(e);S.ready=true;S.loadErr=true;render()}
 async function guard(fn,okMsg){
   try{await fn();if(okMsg)toast(okMsg);return true}
   catch(e){
-    const c=e&&e.code;
-    if(c==='invalid_argument'){S.canWrite=false;toast('你目前只有檢視權限，請請團隊長開「可參與」權限');render()}
-    else if(c==='quota_exceeded')toast('資料空間已滿，請先刪除舊班級成員');
-    else toast('儲存沒有成功，請稍後再試一次');
+    console.error(e);const c=e&&e.code;
+    if(c==='42501'||c==='denied')toast('沒有權限修改這筆資料');
+    else if(c==='23505')toast('你已經在這個班級裡了');
+    else if(c==='PGRST301'||c==='PGRST303'){toast('登入已過期，請重新登入');sb.auth.signOut()}
+    else toast('儲存沒有成功，請檢查網路後再試一次');
     return false;
   }
 }
 
+/* ---------- auth ---------- */
+async function onSession(session){
+  const u=session?session.user:null;
+  if(S.ready&&((u&&u.id)||null)===((S.user&&S.user.id)||null))return;
+  Cloud.stop();
+  Object.assign(S,{user:u,isAdmin:false,ready:false,loadErr:false,classId:null,cls:null,members:{},sel:'',editing:null,addOpen:false,newMember:{mode:1},lastProfile:null,ai:null,guideSel:'',chartSel:'all',tab:'checkin'});
+  if(!u){S.ready=true;render();return}
+  render();
+  try{
+    const {data:a}=await sb.from('fairy_admins').select('user_id').eq('user_id',u.id).maybeSingle();
+    S.isAdmin=!!a;
+    const {data:p}=await sb.from('fairy_members').select('name,upline,mode').eq('user_id',u.id).order('created_at',{ascending:false}).limit(1);
+    S.lastProfile=p&&p[0]||null;
+    await Cloud.load();
+  }catch(e){onLoadErr(e)}
+}
+function authMsg(e){
+  const m=(e&&e.message)||'';
+  if(/Invalid login credentials/i.test(m))return'Email 或密碼錯誤';
+  if(/already registered|already been registered/i.test(m))return'這個 Email 已註冊過，請直接登入';
+  if(/Email not confirmed/i.test(m))return'帳號尚未完成信箱確認，請找團隊長協助';
+  if(/rate limit|too many/i.test(m))return'嘗試太多次了，請稍等幾分鐘再試';
+  if(/valid email|invalid format/i.test(m))return'Email 格式不正確';
+  if(/Password/i.test(m))return'密碼不符合規則（至少 6 碼）';
+  return'登入失敗，請檢查網路後再試一次';
+}
+function viewLogin(){
+  const reg=S.authMode==='signup';
+  return`<div class="panel"><h2>${reg?'第一次使用・註冊帳號':'仙女登入'}</h2><p class="muted" style="margin:0">${reg?'用 Email 和自訂密碼建立帳號，之後換手機也用同一組登入。':'登入後就能打卡，換手機也看得到自己的紀錄。'}</p>
+  <label for="au-email">Email</label><input type="email" id="au-email" autocomplete="email" inputmode="email" value="${esc(S.authEmail)}">
+  <label for="au-pw">密碼${reg?'（至少 6 碼）':''}</label><input type="password" id="au-pw" autocomplete="${reg?'new-password':'current-password'}">
+  ${reg?'<label for="au-pw2">再輸入一次密碼</label><input type="password" id="au-pw2" autocomplete="new-password">':''}
+  <button class="btn rose block" data-act="auth">${reg?'註冊並登入':'登入'}</button>
+  <div style="text-align:center;margin-top:12px"><button class="linkbtn" data-act="authmode">${reg?'已經有帳號？回到登入':'第一次使用？註冊帳號'}</button></div></div>
+  <div class="panel"><h3>忘記密碼</h3><p class="muted" style="margin:0">請私訊團隊長協助重設。</p></div>`;
+}
+
 /* ---------- calculations ---------- */
-function range(){ // class dates up to today
+function range(){
   if(!S.cls)return[];
   const end=S.cls.end<today()?S.cls.end:today();
   const out=[];if(end<S.cls.start)return out;
@@ -277,6 +346,7 @@ function stats(m){
   return{achieved,allAchieved,elapsed:dates.length,videos,now,base,gain:now-base,streak,today:!!logs[today()]};
 }
 function sortedMembers(){return Object.entries(S.members).map(([id,m])=>({id,...m})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'))}
+function canEdit(m){return S.isAdmin||(S.user&&m&&m.userId===S.user.id)}
 
 /* ---------- direction check ---------- */
 function diagnose(m){
@@ -336,12 +406,14 @@ let pending=false;
 function render(){
   const a=document.activeElement;
   if(a&&$('#view').contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){pending=true;return}
-  pending=false;renderHero();renderTabs();
+  pending=false;renderHero();
   const v=$('#view');
-  if(!S.ready){v.innerHTML='<div class="empty"><p>載入中…</p></div>';return}
+  if(S.fatal){$('#tabs').innerHTML='';v.innerHTML=`<div class="panel empty"><p>${esc(S.fatal)}</p></div>`;return}
+  if(!S.ready){$('#tabs').innerHTML='';v.innerHTML='<div class="empty"><p>載入中…</p></div>';return}
+  if(!S.user){$('#tabs').innerHTML='';v.innerHTML=viewLogin();return}
+  renderTabs();
   let h='';
-  if(S.mode==='local')h+=`<div class="notice">目前是單機模式：資料只存在這支手機上。從 Claude 分享連結打開並登入，全班資料就會同步。</div>`;
-  if(!S.canWrite)h+=`<div class="notice">你目前只能查看。要打卡的話，請團隊長把你的分享權限設為「可參與」。</div>`;
+  if(S.loadErr)h+=`<div class="notice">雲端資料讀取失敗，請確認網路後重新整理頁面。</div>`;
   if(!S.cls&&S.tab!=='set'){v.innerHTML=h+emptyClass();return}
   h+=({checkin:viewCheckin,chart:viewChart,guide:viewGuide,all:viewAll,set:viewSet})[S.tab]();
   v.innerHTML=h;
@@ -350,7 +422,7 @@ document.addEventListener('focusout',()=>setTimeout(()=>{if(pending)render()},0)
 function renderTabs(){$('#tabs').innerHTML=TABS.map(([k,t])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${t}</button>`).join('')}
 function renderHero(){
   let h=`<div class="brand">${LOGO}<div><h1 class="title">仙女飛升計畫</h1><p class="sub">日更・雙日更・三日更｜短影音成長導航</p></div></div>`;
-  if(S.cls){
+  if(S.user&&S.cls){
     const ts=teamSeries(),ms=sortedMembers(),gain=ms.reduce((a,m)=>a+stats(m).gain,0);
     h+=`<div class="classline"><span class="classname">${esc(S.cls.name)}</span><span class="dayno">${ended()?'已結業':`第 <b>${dayNo()}</b> 天`} / 共 ${totalDays()} 天</span><span class="dayno">${md(S.cls.start)}–${md(S.cls.end)}</span>${ts?`<span class="heronote"><b>${sign(gain)}</b>全班漲粉</span>`:''}</div>`;
     if(ts)h+=`<div class="herochart">${chartSVG({dates:ts.dates,line:ts.line,h:120,hero:true})}</div>`;
@@ -358,19 +430,28 @@ function renderHero(){
   }else h+=`<div style="height:22px"></div>`;
   $('#hero').innerHTML=h;
 }
-function emptyClass(){return`<div class="panel empty"><h2>開始第一個班級</h2><p>設定班級名稱和日期，仙女們就能開始打卡飛升。</p><button class="btn rose" data-act="goset">建立班級</button></div>`}
+function emptyClass(){
+  if(S.isAdmin)return`<div class="panel empty"><h2>開始第一個班級</h2><p>設定班級名稱和日期，仙女們就能開始打卡飛升。</p><button class="btn rose" data-act="goset">建立班級</button></div>`;
+  return`<div class="panel empty"><h2>還沒開班</h2><p>團隊長開班後，這裡就會出現打卡畫面。</p></div>`;
+}
 
 /* --- check-in --- */
-function memberOptions(sel,withAll){const ms=sortedMembers();return(withAll?`<option value="all"${sel==='all'?' selected':''}>全班</option>`:`<option value="">選擇你的名字</option>`)+ms.map(m=>`<option value="${m.id}"${sel===m.id?' selected':''}>${esc(m.name)}</option>`).join('')}
+function memberOptions(sel,withAll){const ms=sortedMembers();return(withAll?`<option value="all"${sel==='all'?' selected':''}>全班</option>`:`<option value="">選擇仙女</option>`)+ms.map(m=>`<option value="${m.id}"${sel===m.id?' selected':''}>${esc(m.name)}</option>`).join('')}
 function viewCheckin(){
-  const ms=sortedMembers(),m=S.members[S.sel],t=today();
+  const ms=sortedMembers(),t=today(),mine=myId();
+  if(!S.isAdmin)S.sel=mine;
+  else if(!S.sel&&mine)S.sel=mine;
+  const m=S.members[S.sel];
   const done=ms.filter(x=>x.logs&&x.logs[t]);
   let h=`<div class="panel"><h2>修煉打卡</h2>`;
-  h+=`<label for="sel">你是哪位仙女</label><select id="sel" data-bind="sel">${memberOptions(S.sel)}</select>`;
-  h+=`<div style="margin-top:8px"><button class="linkbtn" data-act="toggleadd">${S.addOpen?'收起':'＋ 第一次打卡？新增自己'}</button></div>`;
-  if(S.addOpen){
+  if(S.isAdmin){
+    h+=`<label for="sel">幫哪位仙女打卡（團隊長可代填）</label><select id="sel" data-bind="sel">${memberOptions(S.sel)}</select>`;
+    if(!mine)h+=`<div style="margin-top:8px"><button class="linkbtn" data-act="toggleadd">${S.addOpen?'收起':'＋ 把我自己加入班級'}</button></div>`;
+  }else if(m)h+=`<p class="muted" style="margin:0">${esc(m.name)}，今天也一起飛升 ✨</p>`;
+  const showAdd=!mine&&(S.isAdmin?S.addOpen:true);
+  if(showAdd){
     const nm=S.newMember;
-    h+=`<div class="editbox" style="margin-top:6px"><label for="nm-name">名字（IG 名稱也可以）</label><input type="text" id="nm-name" value="${esc(nm.name||'')}" maxlength="30">
+    h+=`<div class="editbox" style="margin-top:6px">${S.isAdmin?'':`<p style="margin:10px 0 0;font-weight:700">第一次打卡，先加入「${esc(S.cls.name)}」</p>`}<label for="nm-name">名字（IG 名稱也可以）</label><input type="text" id="nm-name" value="${esc(nm.name||'')}" maxlength="30">
     <label for="nm-up">引路仙女（上家）</label><input type="text" id="nm-up" list="uplist" value="${esc(nm.upline||'')}" placeholder="隔代夥伴請填直屬上家" maxlength="30"><datalist id="uplist">${ms.map(x=>`<option value="${esc(x.name)}">`).join('')}</datalist>
     <label>更新模式</label><div class="modes">${[1,2,3].map(k=>`<button type="button" class="mode" aria-pressed="${nm.mode==k}" data-act="nmmode" data-v="${k}"><b>${MODES[k].name}</b><span>${MODES[k].desc}</span></button>`).join('')}</div>
     <label for="nm-base">開班時的粉絲數</label><input type="number" id="nm-base" inputmode="numeric" min="0" value="${esc(nm.base??'')}">
@@ -385,7 +466,7 @@ function viewCheckin(){
     h+=`<label>這天發了幾支短影音</label><div class="stepper"><button type="button" data-act="vid" data-v="-1" aria-label="減少">−</button><output>${d.videos}</output><button type="button" data-act="vid" data-v="1" aria-label="增加">＋</button><span class="goalhint ${d.videos>=mode?'ok':''}">${d.videos>=mode?'今日達標':`目標 ${mode} 支`}</span></div>`;
     h+=`<label for="d-f">目前粉絲數</label><input type="number" id="d-f" data-draft="followers" inputmode="numeric" min="0" value="${esc(d.followers)}" placeholder="${st.now}">`;
     h+=`<label for="d-note">今天的主題（之後用來分析哪種內容有效）</label><input type="text" id="d-note" data-draft="note" maxlength="60" value="${esc(d.note)}" placeholder="例：早餐開箱、穿搭、問答">`;
-    h+=`<button class="btn rose block" data-act="checkin" ${S.canWrite?'':'disabled'}>完成打卡</button>`;
+    h+=`<button class="btn rose block" data-act="checkin">完成打卡</button>`;
   }
   h+=`</div><div class="panel"><h3>今日已打卡 ${done.length} / ${ms.length}</h3><div class="donelist">${done.map(x=>`<span class="chip ${Number(x.logs[t].videos)>=Number(x.mode||1)?'mint':''}">${esc(x.name)}</span>`).join('')||'<span class="muted">今天還沒有人打卡，當第一個吧</span>'}</div></div>`;
   return h;
@@ -394,14 +475,13 @@ function viewCheckin(){
 /* --- chart --- */
 function viewChart(){
   const ms=sortedMembers();
-  if(!ms.length)return`<div class="panel empty"><p>還沒有成員，先到「修煉打卡」新增仙女。</p></div>`;
+  if(!ms.length)return`<div class="panel empty"><p>還沒有成員，先到「修煉打卡」加入班級。</p></div>`;
   const dates=range();let h=`<div class="panel"><h2>飛升軌跡</h2><select id="csel" data-bind="chartSel" aria-label="選擇對象">${memberOptions(S.chartSel,true)}</select>`;
   if(!dates.length)return h+`<p class="muted">班級從 ${md(S.cls.start)} 開始，開班後就會出現曲線。</p></div>`;
   if(S.chartSel==='all'||!S.members[S.chartSel]){
-    const ts=teamSeries(),start=ts.line[0],now=ts.line[ts.line.length-1];
+    const ts=teamSeries(),now=ts.line[ts.line.length-1];
     h+=`<div class="stats"><div class="stat"><b>${num(now)}</b><span>全班粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(ms.reduce((a,m)=>a+stats(m).gain,0))}</b><span>開班至今</span></div><div class="stat"><b>${ms.length}</b><span>班級人數</span></div><div class="stat"><b>${ms.reduce((a,m)=>a+stats(m).videos,0)}</b><span>累積支數</span></div></div>`;
     h+=`<div class="chart">${chartSVG({dates,line:ts.line,bars:ts.bars,goal:ms.length})}</div><div class="legend"><span><i style="background:var(--rose)"></i>全班粉絲總數</span><span><i style="background:var(--mint)"></i>當天打卡人數</span></div>`;
-    void start;
   }else{
     const m=S.members[S.chartSel],st=stats(m),mode=Number(m.mode)||1;
     h+=`<div class="stats"><div class="stat"><b>${num(st.base)}</b><span>起始粉絲</span></div><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>成長</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標天數</span></div></div>`;
@@ -413,8 +493,8 @@ function viewChart(){
 /* --- guide --- */
 function viewGuide(){
   const ms=sortedMembers();
-  if(!ms.length)return`<div class="panel empty"><p>還沒有成員，先到「修煉打卡」新增仙女。</p></div>`;
-  if(!S.guideSel||!S.members[S.guideSel])S.guideSel=S.sel&&S.members[S.sel]?S.sel:ms[0].id;
+  if(!ms.length)return`<div class="panel empty"><p>還沒有成員，先到「修煉打卡」加入班級。</p></div>`;
+  if(!S.guideSel||!S.members[S.guideSel])S.guideSel=S.sel&&S.members[S.sel]?S.sel:(myId()||ms[0].id);
   const m=S.members[S.guideSel],dg=diagnose(m);
   let h=`<h2>仙女指引</h2><label for="gsel" style="margin-top:0">檢測對象</label><select id="gsel" data-bind="guideSel">${memberOptions(S.guideSel)}</select><div style="height:12px"></div>`;
   h+=`<div class="diag ${dg.cls}"><span class="muted">方向檢測</span><div class="state">${dg.state}</div><div>${esc(dg.why)}</div><ol>${dg.acts.map(a=>`<li>${esc(a)}</li>`).join('')}</ol></div>`;
@@ -424,7 +504,7 @@ function viewGuide(){
   <button class="btn rose block" data-act="ai" ${S.aiBusy?'disabled':''}>${S.aiBusy?'正在想文案…':'產生文案方向'}</button>`;
   if(S.ai){
     const r=S.ai;
-    h+=`<div class="out">${r.offline?'<p class="muted">目前無法連線 AI，先提供範本版本。</p>':''}
+    h+=`<div class="out">${r.offline?'<p class="muted">以下是範本版本，可以依自己的狀況修改。</p>':''}
     <div class="outblock"><h3>拍攝方向</h3><div class="pre">${esc(r.direction)}</div></div>
     <div class="outblock"><h3>開頭 3 秒</h3>${(r.hooks||[]).map((x,i)=>`<div class="hook"><span>${esc(x)}</span><button class="btn ghost small" data-act="copy" data-k="hook" data-i="${i}">複製</button></div>`).join('')}</div>
     <div class="outblock"><h3>貼文文案 <button class="btn ghost small" data-act="copy" data-k="caption">複製</button></h3><div class="pre">${esc(r.caption)}</div></div>
@@ -438,7 +518,8 @@ async function runAI(){
   const dg=diagnose(m),mode=Number(m.mode)||1;
   const recent=Object.keys(m.logs||{}).sort().slice(-6).map(d=>m.logs[d].note).filter(Boolean);
   S.aiBusy=true;S.ai=null;render();
-  const sample=await claude.use('sample').catch(()=>null);
+  let sample=null;
+  try{sample=(window.claude&&window.claude.use)?await window.claude.use('sample'):null}catch(e){sample=null}
   if(sample){
     const prompt=`你是台灣短影音經營教練，幫「仙女團隊」的夥伴想下一支短影音。請用台灣繁體中文、口語、親切。
 夥伴狀態：更新模式「${MODES[mode].name}」（${MODES[mode].desc}），起始粉絲 ${dg.st.base}，目前 ${dg.st.now}，近7天變化 ${dg.gain7}，達標 ${dg.st.achieved}/${dg.st.elapsed} 天，系統判定「${dg.state}」。
@@ -469,11 +550,11 @@ function viewAll(){
     const mode=Number(m.mode)||1,pct=T?Math.round(st.allAchieved/T*100):0,complete=st.allAchieved>=T;
     h+=`<div class="mcard"><div><div class="mname">${esc(m.name)}</div><div class="mmeta">${MODES[mode].name}${m.upline?`｜引路仙女 ${esc(m.upline)}`:''}｜${num(st.base)} → ${num(st.now)}</div></div><div class="mgain ${st.gain<0?'neg':''}">${sign(st.gain)}</div>
     <div class="bar"><i style="width:${pct}%;${complete?'background:var(--mint)':''}"></i></div>
-    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${T} 天 ${st.today?'｜今日已打卡':''}</span><button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button></div>`;
-    if(S.editing===m.id){
+    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${T} 天 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
+    if(S.editing===m.id&&canEdit(m)){
       h+=`<div class="editbox"><label for="e-name">名字</label><input type="text" id="e-name" value="${esc(m.name)}" maxlength="30"><label for="e-up">引路仙女</label><input type="text" id="e-up" value="${esc(m.upline||'')}" maxlength="30">
       <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${MODES[k].name}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
-      <div style="display:flex;gap:8px;margin-top:14px;justify-content:space-between"><button class="btn ghost small" data-act="delm" data-id="${m.id}">移除這位仙女</button><button class="btn small" data-act="savem" data-id="${m.id}">儲存</button></div></div>`;
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:${S.isAdmin?'space-between':'flex-end'}">${S.isAdmin?`<button class="btn ghost small" data-act="delm" data-id="${m.id}">移除這位仙女</button>`:''}<button class="btn small" data-act="savem" data-id="${m.id}">儲存</button></div></div>`;
     }
     h+=`</div>`;
   });
@@ -492,10 +573,14 @@ function lineReport(){
 /* --- settings --- */
 function viewSet(){
   const c=S.cls,t=today();
-  let h='';
+  let h=`<div class="panel"><h2>我的帳號</h2><p style="margin:0">${esc(S.user.email||'')}</p><p class="muted" style="margin:4px 0 0">身分：${S.isAdmin?'團隊長（可查看與管理全班）':'仙女夥伴（可填寫與修改自己的紀錄）'}</p><button class="btn ghost small" style="margin-top:12px" data-act="logout">登出</button></div>`;
+  if(!S.isAdmin){
+    if(c)h+=`<div class="panel"><h2>目前班級</h2><p style="margin:0">${esc(c.name)}</p><p class="muted" style="margin:4px 0 0">${md(c.start)}–${md(c.end)}，共 ${totalDays()} 天</p></div>`;
+    return h+`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">每天到「修煉打卡」填寫自己的支數和粉絲數。資料存在雲端，換手機用同一組 Email 和密碼登入就看得到。</p></div>`;
+  }
   if(c)h+=`<div class="panel"><h2>目前班級</h2><label for="c-name">班級名稱</label><input type="text" id="c-name" value="${esc(c.name)}" maxlength="30"><div class="row"><div><label for="c-s">開始</label><input type="date" id="c-s" value="${c.start}"></div><div><label for="c-e">結束</label><input type="date" id="c-e" value="${c.end}"></div></div><button class="btn block" data-act="saveclass">儲存班級設定</button></div>`;
-  h+=`<div class="panel"><h2>${c?'開新的一班':'建立班級'}</h2>${c?'<p class="muted" style="margin:0">開新班級後，大家會從新班重新打卡。舊班資料會保留但不再顯示。</p>':''}<label for="n-name">班級名稱</label><input type="text" id="n-name" placeholder="例：飛升 1 班" maxlength="30"><div class="row"><div><label for="n-s">開始</label><input type="date" id="n-s" value="${t}"></div><div><label for="n-e">結束</label><input type="date" id="n-e" value="${addDays(t,29)}"></div></div><button class="btn rose block" data-act="newclass">${c?'開新班級':'建立班級'}</button></div>`;
-  h+=`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">一次只跑一個班級，大約一個月。仙女們打開連結，選自己的名字就能打卡；第一次的人先新增自己。全班資料即時同步。</p></div>`;
+  h+=`<div class="panel"><h2>${c?'開新的一班':'建立班級'}</h2>${c?'<p class="muted" style="margin:0">開新班級後，大家會從新班重新打卡。舊班資料會保留在雲端但不再顯示。</p>':''}<label for="n-name">班級名稱</label><input type="text" id="n-name" placeholder="例：飛升 1 班" maxlength="30"><div class="row"><div><label for="n-s">開始</label><input type="date" id="n-s" value="${t}"></div><div><label for="n-e">結束</label><input type="date" id="n-e" value="${addDays(t,29)}"></div></div><button class="btn rose block" data-act="newclass">${c?'開新班級':'建立班級'}</button></div>`;
+  h+=`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">一次只跑一個班級，大約一個月。仙女們打開連結、註冊登入後，第一次先加入班級就能打卡。每個人只能修改自己的紀錄，團隊長可以查看與修改全班。</p></div>`;
   return h;
 }
 
@@ -504,37 +589,53 @@ document.addEventListener('click',async e=>{
   const tb=e.target.closest('[data-tab]');if(tb){S.tab=tb.dataset.tab;render();window.scrollTo({top:0});return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,v=k=>{const el=document.getElementById(k);return el?el.value.trim():''};
-  if(act==='goset'){S.tab='set';render()}
+  if(act==='authmode'){S.authEmail=v('au-email');S.authMode=S.authMode==='login'?'signup':'login';render()}
+  else if(act==='auth'){
+    const email=v('au-email').toLowerCase(),pw=(document.getElementById('au-pw')||{}).value||'',reg=S.authMode==='signup';
+    S.authEmail=email;
+    if(!email||!pw){toast('請輸入 Email 和密碼');return}
+    if(reg){if(pw.length<6){toast('密碼至少 6 碼');return}if(pw!==((document.getElementById('au-pw2')||{}).value||'')){toast('兩次輸入的密碼不一樣');return}}
+    if(b.disabled)return;b.disabled=true;b.textContent='處理中…';
+    let res;
+    try{res=reg?await sb.auth.signUp({email,password:pw}):await sb.auth.signInWithPassword({email,password:pw})}
+    catch(err){res={error:err}}
+    if(res.error){toast(authMsg(res.error));b.disabled=false;b.textContent=reg?'註冊並登入':'登入';return}
+    if(reg&&!res.data.session){toast('註冊成功，但需要信箱確認才能登入，請找團隊長協助');S.authMode='login';render();return}
+    await onSession(res.data.session);
+  }
+  else if(act==='logout'){await sb.auth.signOut();await onSession(null)}
+  else if(act==='goset'){S.tab='set';render()}
   else if(act==='toggleadd'){S.addOpen=!S.addOpen;render()}
   else if(act==='nmmode'){S.newMember.name=v('nm-name');S.newMember.upline=v('nm-up');S.newMember.base=v('nm-base');S.newMember.mode=+b.dataset.v;render()}
   else if(act==='addmember'){
     const name=v('nm-name');if(!name){toast('請輸入名字');return}
-    if(sortedMembers().some(m=>m.name===name)){toast('這個名字已經在班上了，直接選它就好');return}
-    const id=uid(),data={name,upline:v('nm-up'),mode:S.newMember.mode||1,base:Number(v('nm-base'))||0,logs:{},createdAt:Date.now()};
-    if(await guard(()=>store.saveMember(id,data),'歡迎加入飛升計畫')){S.sel=id;S.addOpen=false;S.newMember={mode:1};S.draft={date:today(),videos:0,followers:'',note:''};render()}
+    if(sortedMembers().some(m=>m.name===name)){toast('這個名字已經有人用了，請換一個（例如加上 IG 名稱）');return}
+    const data={name,upline:v('nm-up'),mode:S.newMember.mode||1,base:Math.max(0,Number(v('nm-base'))||0)};
+    let id='';
+    if(await guard(async()=>{id=await Cloud.addMember(data)},'歡迎加入飛升計畫')){S.sel=id;S.addOpen=false;S.newMember={mode:1};S.draft={date:today(),videos:0,followers:'',note:''};render()}
   }
   else if(act==='vid'){S.draft.videos=Math.max(0,Math.min(9,S.draft.videos+ +b.dataset.v));render()}
   else if(act==='checkin'){
     const m=S.members[S.sel];if(!m)return;const d=S.draft;
     if(!d.date||d.date<S.cls.start||d.date>S.cls.end){toast('日期要在班級期間內');return}
     if(d.date>today()){toast('不能幫未來打卡喔');return}
-    const logs={...(m.logs||{})};logs[d.date]={videos:d.videos,followers:d.followers===''?'':Number(d.followers),note:d.note,at:Date.now()};
+    const entry={videos:d.videos,followers:d.followers===''||d.followers==null?'':Math.max(0,Number(d.followers)||0),note:d.note||'',at:Date.now()};
     const mode=Number(m.mode)||1;
-    if(await guard(()=>store.saveMember(S.sel,{...m,logs}),d.videos>=mode?'打卡完成，今日達標':'打卡完成')){S.draft={date:today(),videos:0,followers:'',note:''};render()}
+    if(await guard(()=>Cloud.checkin(S.sel,d.date,entry),d.videos>=mode?'打卡完成，今日達標':'打卡完成')){S.draft={date:today(),videos:0,followers:'',note:''};render()}
   }
   else if(act==='ai'){runAI()}
   else if(act==='copy'){const r=S.ai;if(!r)return;copyText(b.dataset.k==='hook'?r.hooks[+b.dataset.i]:r.caption)}
   else if(act==='line'){copyText(lineReport())}
   else if(act==='edit'){S.editing=S.editing===b.dataset.id?null:b.dataset.id;render()}
-  else if(act==='savem'){const m=S.members[b.dataset.id];const name=v('e-name');if(!name){toast('名字不能空白');return}
-    if(await guard(()=>store.saveMember(b.dataset.id,{...m,name,upline:v('e-up'),mode:+v('e-mode')||1,base:Number(v('e-base'))||0}),'已儲存'))S.editing=null,render()}
-  else if(act==='delm'){const m=S.members[b.dataset.id];if(!confirm(`確定移除「${m.name}」？她的打卡紀錄會一起刪除。`))return;
-    if(await guard(()=>store.deleteMember(b.dataset.id),'已移除')){S.editing=null;if(S.sel===b.dataset.id)S.sel='';render()}}
+  else if(act==='savem'){const name=v('e-name');if(!name){toast('名字不能空白');return}
+    if(await guard(()=>Cloud.updateMember(b.dataset.id,{name,upline:v('e-up'),mode:+v('e-mode')||1,base:Math.max(0,Number(v('e-base'))||0)}),'已儲存')){S.editing=null;render()}}
+  else if(act==='delm'){const m=S.members[b.dataset.id];if(!m||!confirm(`確定移除「${m.name}」？她在這一班的打卡紀錄會一起刪除。`))return;
+    if(await guard(()=>Cloud.deleteMember(b.dataset.id),'已移除')){S.editing=null;if(S.sel===b.dataset.id)S.sel='';render()}}
   else if(act==='saveclass'){const name=v('c-name'),s=v('c-s'),en=v('c-e');if(!name||!s||!en||en<s){toast('請確認名稱和日期（結束要在開始之後）');return}
-    guard(()=>store.saveClass(S.classId,{...S.cls,name,start:s,end:en},false),'已儲存班級設定')}
+    guard(()=>Cloud.saveClass({name,start:s,end:en}),'已儲存班級設定')}
   else if(act==='newclass'){const name=v('n-name'),s=v('n-s'),en=v('n-e');if(!name||!s||!en||en<s){toast('請確認名稱和日期（結束要在開始之後）');return}
     if(S.cls&&!confirm(`確定開新班級「${name}」？目前的班級會結束顯示。`))return;
-    if(await guard(()=>store.saveClass(uid(),{name,start:s,end:en,createdAt:Date.now()},true),'班級已建立')){S.sel='';S.tab='checkin';render()}}
+    if(await guard(()=>Cloud.newClass({name,start:s,end:en}),'班級已建立')){S.sel='';S.tab='checkin';render()}}
 });
 document.addEventListener('input',e=>{
   const t=e.target;
@@ -550,14 +651,18 @@ document.addEventListener('change',e=>{
   if(k==='guideSel')S.ai=null;
   t.blur();render();
 });
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&/^au-/.test(e.target.id)){const b=document.querySelector('[data-act="auth"]');if(b)b.click()}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.user)Cloud.soon()});
 
 /* ---------- boot ---------- */
 render();
 (async()=>{
-  let db=null;
-  try{db=window.claude&&window.claude.use?await window.claude.use('db'):null}catch(e){db=null}
-  if(db){S.mode='db';store=DbStore(db)}else{S.mode='local';store=LocalStore}
-  store.init();
+  if(!sb){S.fatal='雲端元件載入失敗，請確認網路後重新整理頁面。';render();return}
+  try{const {data:{session}}=await sb.auth.getSession();await onSession(session)}
+  catch(e){console.error(e);S.ready=true;render()}
+  sb.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='SIGNED_IN'||ev==='SIGNED_OUT')setTimeout(()=>onSession(session),0);
+  });
 })();
 </script>
 </body>
