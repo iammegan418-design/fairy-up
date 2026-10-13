@@ -422,7 +422,7 @@ function render(){
   const v=$('#view');
   if(S.fatal){$('#tabs').innerHTML='';v.innerHTML=`<div class="panel empty"><p>${esc(S.fatal)}</p></div>`;return}
   if(!S.ready){$('#tabs').innerHTML='';v.innerHTML='<div class="empty"><p>載入中…</p></div>';return}
-  if(!S.user){$('#tabs').innerHTML='';v.innerHTML=viewLogin();return}
+  if(!S.user){$('#tabs').innerHTML='';v.innerHTML=(DIAG.length?diagBox():'')+viewLogin();return}
   renderTabs();
   let h='';
   if(S.loadErr||DIAG.length)h+=diagBox();
@@ -434,7 +434,7 @@ document.addEventListener('focusout',()=>setTimeout(()=>{if(pending)render()},0)
 function diagBox(){
   const rows=DIAG.slice().reverse().map(r=>`<div style="border-top:1px dashed var(--line);padding:8px 0 4px"><div><b>失敗步驟：</b>${esc(r.step)}</div>${r.status!==''?`<div><b>HTTP 狀態：</b>${esc(r.status)}</div>`:''}<div><b>錯誤代碼：</b>${esc(r.code||'（無）')}</div><div><b>錯誤訊息：</b>${esc(r.message)}</div>${r.details?`<div><b>詳細：</b>${esc(r.details)}</div>`:''}${r.hint?`<div><b>提示：</b>${esc(r.hint)}</div>`:''}<div class="muted" style="font-size:.75rem">${esc(r.at)}</div></div>`).join('');
   const txt=DIAG.map(r=>`[${r.step}] status=${r.status} code=${r.code} message=${r.message}${r.details?' details='+r.details:''}${r.hint?' hint='+r.hint:''}`).join('\n');
-  return`<div class="notice" style="word-break:break-word"><b>${S.loadErr?'雲端資料讀取失敗':'雲端連線有警告'}</b>（測試版診斷資訊）${rows||'<div>沒有收到錯誤細節，請確認網路後重新整理。</div>'}<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="copydiag" data-t="${esc(txt)}">複製錯誤資訊</button><button class="btn ghost small" data-act="retry">重新讀取</button></div></div>`;
+  return`<div class="notice" style="word-break:break-word"><b>${S.loadErr?'雲端資料讀取失敗':'雲端連線有警告'}</b>（錯誤資訊）${rows||'<div>沒有收到錯誤細節，請確認網路後重新整理。</div>'}<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="copydiag" data-t="${esc(txt)}">複製錯誤資訊</button><button class="btn ghost small" data-act="retry">重新讀取</button></div></div>`;
 }
 function renderTabs(){$('#tabs').innerHTML=TABS.map(([k,t])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${t}</button>`).join('')}
 function renderHero(){
