@@ -218,15 +218,18 @@ const S={ready:false,user:null,isAdmin:false,loadErr:false,fatal:'',authMode:'lo
 const toCls=r=>r?{name:r.name,start:r.start_date,end:r.end_date,createdAt:r.created_at}:null;
 const toMem=r=>({name:r.name,upline:r.upline||'',mode:Number(r.mode)||1,base:Number(r.base)||0,logs:r.logs||{},userId:r.user_id,createdAt:r.created_at});
 function myId(){const e=Object.entries(S.members).find(([,m])=>S.user&&m.userId===S.user.id);return e?e[0]:''}
-function fail(error){if(error)throw error}
+function fail(error,step,status){if(error){error.step=step||error.step||'';if(status!=null)error.status=status;throw error}}
+const DIAG=[];
+function diagAdd(e,step){const r={step:step||(e&&e.step)||'未知步驟',status:e&&e.status!=null?e.status:'',code:(e&&e.code)||'',message:(e&&(e.message||e.error_description||e.msg))||String(e||''),details:(e&&e.details)||'',hint:(e&&e.hint)||'',at:new Date().toLocaleTimeString('zh-TW')};DIAG.push(r);if(DIAG.length>8)DIAG.shift();console.error('[Supabase]',r,e);return r}
 function mustHit(data){if(!data||!data.length)throw{code:'denied'}}
 const Cloud={
   chan:null,t:null,
   async load(){
-    const {data:c,error:e1}=await sb.from('fairy_classes').select('*').eq('is_current',true).order('created_at',{ascending:false}).limit(1);fail(e1);
+    const {data:c,error:e1,status:s1}=await sb.from('fairy_classes').select('*').eq('is_current',true).order('created_at',{ascending:false}).limit(1);fail(e1,'① 讀取目前班級 fairy_classes（條件 is_current = true）',s1);
     const row=c&&c[0],members={};
-    if(row){const {data:m,error:e2}=await sb.from('fairy_members').select('*').eq('class_id',row.id);fail(e2);m.forEach(r=>members[r.id]=toMem(r))}
+    if(row){const {data:m,error:e2,status:s2}=await sb.from('fairy_members').select('*').eq('class_id',row.id);fail(e2,`② 讀取班級成員 fairy_members（class_id = ${row.id}）`,s2);m.forEach(r=>members[r.id]=toMem(r))}
     S.classId=row?row.id:null;S.cls=toCls(row);S.members=members;S.ready=true;S.loadErr=false;
+    if(row&&(!S.cls.start||!S.cls.end))diagAdd({code:'欄位缺少',message:`班級資料沒有 start_date 或 end_date 欄位值。這一列實際的欄位是：${Object.keys(row).join(', ')}`},'③ 檢查班級欄位');
     const mine=myId();
     if(!S.isAdmin)S.sel=mine;
     else if(S.sel&&!S.members[S.sel])S.sel='';
@@ -238,7 +241,7 @@ const Cloud={
     this.chan=sb.channel('fairy-sync')
       .on('postgres_changes',{event:'*',schema:'public',table:'fairy_members'},()=>this.soon())
       .on('postgres_changes',{event:'*',schema:'public',table:'fairy_classes'},()=>this.soon())
-      .subscribe();
+      .subscribe((st,err)=>{if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){diagAdd(err||{message:st},'④ 即時同步連線 (Realtime)');render()}});
   },
   stop(){if(this.chan){sb.removeChannel(this.chan);this.chan=null}},
   soon(){clearTimeout(this.t);this.t=setTimeout(()=>{if(S.user)this.load().catch(onLoadErr)},500)},
@@ -268,11 +271,11 @@ const Cloud={
     await this.load();
   }
 };
-function onLoadErr(e){console.error(e);S.ready=true;S.loadErr=true;render()}
+function onLoadErr(e){diagAdd(e);S.ready=true;S.loadErr=true;render()}
 async function guard(fn,okMsg){
   try{await fn();if(okMsg)toast(okMsg);return true}
   catch(e){
-    console.error(e);const c=e&&e.code;
+    diagAdd(e,e&&e.step||'儲存資料');const c=e&&e.code;
     if(c==='42501'||c==='denied')toast('沒有權限修改這筆資料');
     else if(c==='23505')toast('你已經在這個班級裡了');
     else if(c==='PGRST301'||c==='PGRST303'){toast('登入已過期，請重新登入');sb.auth.signOut()}
@@ -290,9 +293,11 @@ async function onSession(session){
   if(!u){S.ready=true;render();return}
   render();
   try{
-    const {data:a}=await sb.from('fairy_admins').select('user_id').eq('user_id',u.id).maybeSingle();
+    const {data:a,error:ea,status:sa}=await sb.from('fairy_admins').select('user_id').eq('user_id',u.id).maybeSingle();
+    if(ea){ea.status=sa;diagAdd(ea,'⓪ 檢查團隊長身分 fairy_admins')}
     S.isAdmin=!!a;
-    const {data:p}=await sb.from('fairy_members').select('name,upline,mode').eq('user_id',u.id).order('created_at',{ascending:false}).limit(1);
+    const {data:p,error:ep,status:sp}=await sb.from('fairy_members').select('name,upline,mode').eq('user_id',u.id).order('created_at',{ascending:false}).limit(1);
+    if(ep){ep.status=sp;diagAdd(ep,'⓪ 讀取我上一班的名字 fairy_members（user_id）')}
     S.lastProfile=p&&p[0]||null;
     await Cloud.load();
   }catch(e){onLoadErr(e)}
@@ -413,12 +418,17 @@ function render(){
   if(!S.user){$('#tabs').innerHTML='';v.innerHTML=viewLogin();return}
   renderTabs();
   let h='';
-  if(S.loadErr)h+=`<div class="notice">雲端資料讀取失敗，請確認網路後重新整理頁面。</div>`;
+  if(S.loadErr||DIAG.length)h+=diagBox();
   if(!S.cls&&S.tab!=='set'){v.innerHTML=h+emptyClass();return}
   h+=({checkin:viewCheckin,chart:viewChart,guide:viewGuide,all:viewAll,set:viewSet})[S.tab]();
   v.innerHTML=h;
 }
 document.addEventListener('focusout',()=>setTimeout(()=>{if(pending)render()},0));
+function diagBox(){
+  const rows=DIAG.slice().reverse().map(r=>`<div style="border-top:1px dashed var(--line);padding:8px 0 4px"><div><b>失敗步驟：</b>${esc(r.step)}</div>${r.status!==''?`<div><b>HTTP 狀態：</b>${esc(r.status)}</div>`:''}<div><b>錯誤代碼：</b>${esc(r.code||'（無）')}</div><div><b>錯誤訊息：</b>${esc(r.message)}</div>${r.details?`<div><b>詳細：</b>${esc(r.details)}</div>`:''}${r.hint?`<div><b>提示：</b>${esc(r.hint)}</div>`:''}<div class="muted" style="font-size:.75rem">${esc(r.at)}</div></div>`).join('');
+  const txt=DIAG.map(r=>`[${r.step}] status=${r.status} code=${r.code} message=${r.message}${r.details?' details='+r.details:''}${r.hint?' hint='+r.hint:''}`).join('\n');
+  return`<div class="notice" style="word-break:break-word"><b>${S.loadErr?'雲端資料讀取失敗':'雲端連線有警告'}</b>（測試版診斷資訊）${rows||'<div>沒有收到錯誤細節，請確認網路後重新整理。</div>'}<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn ghost small" data-act="copydiag" data-t="${esc(txt)}">複製錯誤資訊</button><button class="btn ghost small" data-act="retry">重新讀取</button></div></div>`;
+}
 function renderTabs(){$('#tabs').innerHTML=TABS.map(([k,t])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${t}</button>`).join('')}
 function renderHero(){
   let h=`<div class="brand">${LOGO}<div><h1 class="title">仙女飛升計畫</h1><p class="sub">日更・雙日更・三日更｜短影音成長導航</p></div></div>`;
@@ -603,6 +613,8 @@ document.addEventListener('click',async e=>{
     if(reg&&!res.data.session){toast('註冊成功，但需要信箱確認才能登入，請找團隊長協助');S.authMode='login';render();return}
     await onSession(res.data.session);
   }
+  else if(act==='copydiag'){copyText(b.dataset.t||'')}
+  else if(act==='retry'){DIAG.length=0;S.loadErr=false;S.ready=false;render();Cloud.load().catch(onLoadErr)}
   else if(act==='logout'){await sb.auth.signOut();await onSession(null)}
   else if(act==='goset'){S.tab='set';render()}
   else if(act==='toggleadd'){S.addOpen=!S.addOpen;render()}
