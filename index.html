@@ -72,7 +72,7 @@ h3{font-size:1rem;margin:0 0 8px}
 .panel{background:var(--paper);border:1px solid var(--line);box-shadow:0 6px 20px rgba(156,134,230,.08);border-radius:20px;padding:16px;margin-bottom:14px}
 .muted{color:var(--soft);font-size:.88rem}
 label{display:block;font-size:.85rem;color:var(--soft);margin:12px 0 5px}
-input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:1rem}
+input[type=text],input[type=tel],input[type=email],input[type=password],input[type=number],input[type=date],select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:1rem}
 textarea{min-height:70px;resize:vertical}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer;background:var(--ink);color:var(--bg);font-size:.98rem}
@@ -209,15 +209,15 @@ const SUPABASE_KEY='sb_publishable_n4jbJpR7WujZNDeLlS6n6w_Cmy1LvqF';
 const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 
 /* ---------- state ---------- */
-const S={ready:false,user:null,isAdmin:false,loadErr:false,fatal:'',authMode:'login',authEmail:'',lastProfile:null,
+const S={ready:false,user:null,isAdmin:false,loadErr:false,fatal:'',authMode:'login',authPhone:'',lastProfile:null,
   classId:null,cls:null,members:{},tab:'checkin',
   sel:'',addOpen:false,draft:{date:today(),videos:0,followers:'',note:''},newMember:{mode:1},
   chartSel:'all',guideSel:'',ai:null,aiBusy:false,aiTopic:'',aiGoal:'漲粉曝光',editing:null};
 
 /* ---------- cloud storage ---------- */
 const toCls=r=>r?{name:r.name,start:r.start_date,end:r.end_date,createdAt:r.created_at}:null;
-const toMem=r=>({name:r.name,upline:r.upline||'',mode:Number(r.mode)||1,base:Number(r.base)||0,logs:r.logs||{},userId:r.user_id,createdAt:r.created_at});
-function myId(){const e=Object.entries(S.members).find(([,m])=>S.user&&m.userId===S.user.id);return e?e[0]:''}
+const toMem=r=>({name:r.name,upline:r.upline||'',mode:Number(r.mode)||1,base:Number(r.base)||0,logs:r.logs||{},personId:r.person_id,createdAt:r.created_at});
+function myId(){const e=Object.entries(S.members).find(([,m])=>S.user&&m.personId===S.user.id);return e?e[0]:''}
 function fail(error,step,status){if(error){error.step=step||error.step||'';if(status!=null)error.status=status;throw error}}
 const DIAG=[];
 function diagAdd(e,step){const r={step:step||(e&&e.step)||'未知步驟',status:e&&e.status!=null?e.status:'',code:(e&&e.code)||'',message:(e&&(e.message||e.error_description||e.msg))||String(e||''),details:(e&&e.details)||'',hint:(e&&e.hint)||'',at:new Date().toLocaleTimeString('zh-TW')};DIAG.push(r);if(DIAG.length>8)DIAG.shift();console.error('[Supabase]',r,e);return r}
@@ -255,7 +255,7 @@ const Cloud={
     await this.load();
   },
   async addMember(d){
-    const {data,error}=await sb.from('fairy_members').insert({class_id:S.classId,user_id:S.user.id,name:d.name,upline:d.upline,mode:d.mode,base:d.base}).select('id').single();fail(error);
+    const {data,error}=await sb.from('fairy_members').insert({class_id:S.classId,person_id:S.user.id,name:d.name,upline:d.upline,mode:d.mode,base:d.base}).select('id').single();fail(error);
     await this.load();return data.id;
   },
   async updateMember(id,f){
@@ -278,49 +278,56 @@ async function guard(fn,okMsg){
     diagAdd(e,e&&e.step||'儲存資料');const c=e&&e.code;
     if(c==='42501'||c==='denied')toast('沒有權限修改這筆資料');
     else if(c==='23505')toast('你已經在這個班級裡了');
-    else if(c==='PGRST301'||c==='PGRST303'){toast('登入已過期，請重新登入');sb.auth.signOut()}
+    else if(c==='PGRST301'||c==='PGRST303'){toast('連線已過期，請重新整理頁面')}
     else toast('儲存沒有成功，請檢查網路後再試一次');
     return false;
   }
 }
 
-/* ---------- auth ---------- */
-async function onSession(session){
-  const u=session?session.user:null;
-  if(S.ready&&((u&&u.id)||null)===((S.user&&S.user.id)||null))return;
+/* ---------- auth：手機號碼＋6 位數字（不用信箱） ---------- */
+// 每支手機先用 Supabase「匿名登入」拿到一個裝置身分，再用手機號碼＋6 位數字綁定到仙女本人。
+async function ensureDevice(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(session)return session;
+  const {data,error}=await sb.auth.signInAnonymously();
+  if(error){error.step='⓪ 建立裝置身分（匿名登入）';throw error}
+  return data.session;
+}
+async function identify(){
   Cloud.stop();
-  Object.assign(S,{user:u,isAdmin:false,ready:false,loadErr:false,classId:null,cls:null,members:{},sel:'',editing:null,addOpen:false,newMember:{mode:1},lastProfile:null,ai:null,guideSel:'',chartSel:'all',tab:'checkin'});
-  if(!u){S.ready=true;render();return}
+  Object.assign(S,{user:null,isAdmin:false,ready:false,loadErr:false,classId:null,cls:null,members:{},sel:'',editing:null,addOpen:false,newMember:{mode:1},lastProfile:null,ai:null,guideSel:'',chartSel:'all',tab:'checkin'});
   render();
   try{
-    const {data:a,error:ea,status:sa}=await sb.from('fairy_admins').select('user_id').eq('user_id',u.id).maybeSingle();
-    if(ea){ea.status=sa;diagAdd(ea,'⓪ 檢查團隊長身分 fairy_admins')}
-    S.isAdmin=!!a;
-    const {data:p,error:ep,status:sp}=await sb.from('fairy_members').select('name,upline,mode').eq('user_id',u.id).order('created_at',{ascending:false}).limit(1);
-    if(ep){ep.status=sp;diagAdd(ep,'⓪ 讀取我上一班的名字 fairy_members（user_id）')}
-    S.lastProfile=p&&p[0]||null;
-    await Cloud.load();
-  }catch(e){onLoadErr(e)}
+    await ensureDevice();
+    const {data:me,error,status}=await sb.rpc('fairy_me');
+    if(error){error.status=status;error.step='⓪ 確認這支手機綁定的仙女 fairy_me';throw error}
+    await enter(me);
+  }catch(e){
+    const m=(e&&e.message)||'';
+    if(/anonymous/i.test(m))S.fatal='團隊長還沒開啟 Supabase 的「Allow anonymous sign-ins」，開啟後重新整理即可。';
+    onLoadErr(e);
+  }
 }
-function authMsg(e){
-  const m=(e&&e.message)||'';
-  if(/Invalid login credentials/i.test(m))return'Email 或密碼錯誤';
-  if(/already registered|already been registered/i.test(m))return'這個 Email 已註冊過，請直接登入';
-  if(/Email not confirmed/i.test(m))return'帳號尚未完成信箱確認，請找團隊長協助';
-  if(/rate limit|too many/i.test(m))return'嘗試太多次了，請稍等幾分鐘再試';
-  if(/valid email|invalid format/i.test(m))return'Email 格式不正確';
-  if(/Password/i.test(m))return'密碼不符合規則（至少 6 碼）';
-  return'登入失敗，請檢查網路後再試一次';
+async function enter(me){
+  if(!me||!me.person_id){S.user=null;S.ready=true;render();return}
+  S.user={id:me.person_id,phone:me.phone};S.isAdmin=!!me.is_admin;
+  const {data:p,error:ep,status:sp}=await sb.from('fairy_members').select('name,upline,mode').eq('person_id',me.person_id).order('created_at',{ascending:false}).limit(1);
+  if(ep){ep.status=sp;diagAdd(ep,'⓪ 讀取我上一班的名字 fairy_members（person_id）')}
+  S.lastProfile=p&&p[0]||null;
+  await Cloud.load();
+}
+const LOGIN_ERR={bad_phone:'手機號碼格式不對，請輸入 8～15 位數字',bad_pin:'密碼請輸入 6 位數字',not_found:'找不到這個手機號碼，第一次使用請按「第一次使用」',exists:'這個手機號碼已經註冊過了，請直接登入',no_session:'連線還沒準備好，請重新整理頁面'};
+function loginMsg(r){
+  if(!r)return'登入失敗，請檢查網路後再試一次';
+  if(r.error==='wrong_pin')return r.left>0?`密碼不對，還可以再試 ${r.left} 次`:'密碼錯太多次，已暫停 15 分鐘';
+  if(r.error==='locked')return`密碼錯太多次，請 ${r.minutes||15} 分鐘後再試，或請團隊長重設`;
+  return LOGIN_ERR[r.error]||'登入失敗，請檢查網路後再試一次';
 }
 function viewLogin(){
-  const reg=S.authMode==='signup';
-  return`<div class="panel"><h2>${reg?'第一次使用・註冊帳號':'仙女登入'}</h2><p class="muted" style="margin:0">${reg?'用 Email 和自訂密碼建立帳號，之後換手機也用同一組登入。':'登入後就能打卡，換手機也看得到自己的紀錄。'}</p>
-  <label for="au-email">Email</label><input type="email" id="au-email" autocomplete="email" inputmode="email" value="${esc(S.authEmail)}">
-  <label for="au-pw">密碼${reg?'（至少 6 碼）':''}</label><input type="password" id="au-pw" autocomplete="${reg?'new-password':'current-password'}">
-  ${reg?'<label for="au-pw2">再輸入一次密碼</label><input type="password" id="au-pw2" autocomplete="new-password">':''}
-  <button class="btn rose block" data-act="auth">${reg?'註冊並登入':'登入'}</button>
-  <div style="text-align:center;margin-top:12px"><button class="linkbtn" data-act="authmode">${reg?'已經有帳號？回到登入':'第一次使用？註冊帳號'}</button></div></div>
-  <div class="panel"><h3>忘記密碼</h3><p class="muted" style="margin:0">請私訊團隊長協助重設。</p></div>`;
+  return`<div class="panel"><h2>仙女登入</h2><p class="muted" style="margin:0">只要輸入手機號碼就能登入，不用記密碼。同一支手機登入一次就會一直記住。</p>
+  <label for="au-phone">手機號碼</label><input type="tel" id="au-phone" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="例：0912345678" value="${esc(S.authPhone)}">
+  <button class="btn rose block" data-act="auth">登入</button></div>
+  <div class="panel"><h3>換手機了？</h3><p class="muted" style="margin:0">輸入同一個手機號碼，原本的打卡紀錄都會在。</p></div>`;
 }
 
 /* ---------- calculations ---------- */
@@ -351,7 +358,7 @@ function stats(m){
   return{achieved,allAchieved,elapsed:dates.length,videos,now,base,gain:now-base,streak,today:!!logs[today()]};
 }
 function sortedMembers(){return Object.entries(S.members).map(([id,m])=>({id,...m})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'))}
-function canEdit(m){return S.isAdmin||(S.user&&m&&m.userId===S.user.id)}
+function canEdit(m){return S.isAdmin||(S.user&&m&&m.personId===S.user.id)}
 
 /* ---------- direction check ---------- */
 function diagnose(m){
@@ -564,7 +571,8 @@ function viewAll(){
     if(S.editing===m.id&&canEdit(m)){
       h+=`<div class="editbox"><label for="e-name">名字</label><input type="text" id="e-name" value="${esc(m.name)}" maxlength="30"><label for="e-up">引路仙女</label><input type="text" id="e-up" value="${esc(m.upline||'')}" maxlength="30">
       <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${MODES[k].name}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
-      <div style="display:flex;gap:8px;margin-top:14px;justify-content:${S.isAdmin?'space-between':'flex-end'}">${S.isAdmin?`<button class="btn ghost small" data-act="delm" data-id="${m.id}">移除這位仙女</button>`:''}<button class="btn small" data-act="savem" data-id="${m.id}">儲存</button></div></div>`;
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:${S.isAdmin?'space-between':'flex-end'}">${S.isAdmin?`<button class="btn ghost small" data-act="delm" data-id="${m.id}">移除這位仙女</button>`:''}<button class="btn small" data-act="savem" data-id="${m.id}">儲存</button></div>
+</div>`;
     }
     h+=`</div>`;
   });
@@ -583,14 +591,14 @@ function lineReport(){
 /* --- settings --- */
 function viewSet(){
   const c=S.cls,t=today();
-  let h=`<div class="panel"><h2>我的帳號</h2><p style="margin:0">${esc(S.user.email||'')}</p><p class="muted" style="margin:4px 0 0">身分：${S.isAdmin?'團隊長（可查看與管理全班）':'仙女夥伴（可填寫與修改自己的紀錄）'}</p><button class="btn ghost small" style="margin-top:12px" data-act="logout">登出</button></div>`;
+  let h=`<div class="panel"><h2>我的帳號</h2><p style="margin:0">手機 ${esc(String(S.user.phone||'').replace(/^(\d{4})\d+(\d{3})$/,'$1***$2'))}</p><p class="muted" style="margin:4px 0 0">身分：${S.isAdmin?'團隊長（可查看與管理全班）':'仙女夥伴（可填寫與修改自己的紀錄）'}</p><button class="btn ghost small" style="margin-top:12px" data-act="logout">登出</button></div>`;
   if(!S.isAdmin){
     if(c)h+=`<div class="panel"><h2>目前班級</h2><p style="margin:0">${esc(c.name)}</p><p class="muted" style="margin:4px 0 0">${md(c.start)}–${md(c.end)}，共 ${totalDays()} 天</p></div>`;
-    return h+`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">每天到「修煉打卡」填寫自己的支數和粉絲數。資料存在雲端，換手機用同一組 Email 和密碼登入就看得到。</p></div>`;
+    return h+`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">每天到「修煉打卡」填寫自己的支數和粉絲數。資料存在雲端，換手機時輸入同一個手機號碼登入就看得到。</p></div>`;
   }
   if(c)h+=`<div class="panel"><h2>目前班級</h2><label for="c-name">班級名稱</label><input type="text" id="c-name" value="${esc(c.name)}" maxlength="30"><div class="row"><div><label for="c-s">開始</label><input type="date" id="c-s" value="${c.start}"></div><div><label for="c-e">結束</label><input type="date" id="c-e" value="${c.end}"></div></div><button class="btn block" data-act="saveclass">儲存班級設定</button></div>`;
   h+=`<div class="panel"><h2>${c?'開新的一班':'建立班級'}</h2>${c?'<p class="muted" style="margin:0">開新班級後，大家會從新班重新打卡。舊班資料會保留在雲端但不再顯示。</p>':''}<label for="n-name">班級名稱</label><input type="text" id="n-name" placeholder="例：飛升 1 班" maxlength="30"><div class="row"><div><label for="n-s">開始</label><input type="date" id="n-s" value="${t}"></div><div><label for="n-e">結束</label><input type="date" id="n-e" value="${addDays(t,29)}"></div></div><button class="btn rose block" data-act="newclass">${c?'開新班級':'建立班級'}</button></div>`;
-  h+=`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">一次只跑一個班級，大約一個月。仙女們打開連結、註冊登入後，第一次先加入班級就能打卡。每個人只能修改自己的紀錄，團隊長可以查看與修改全班。</p></div>`;
+  h+=`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">一次只跑一個班級，大約一個月。仙女們打開連結，輸入手機號碼登入，第一次先加入班級就能打卡。不用記密碼，所以沒有忘記密碼的問題。每個人只能修改自己的紀錄，團隊長可以查看與修改全班。</p></div>`;
   return h;
 }
 
@@ -599,23 +607,31 @@ document.addEventListener('click',async e=>{
   const tb=e.target.closest('[data-tab]');if(tb){S.tab=tb.dataset.tab;render();window.scrollTo({top:0});return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const act=b.dataset.act,v=k=>{const el=document.getElementById(k);return el?el.value.trim():''};
-  if(act==='authmode'){S.authEmail=v('au-email');S.authMode=S.authMode==='login'?'signup':'login';render()}
-  else if(act==='auth'){
-    const email=v('au-email').toLowerCase(),pw=(document.getElementById('au-pw')||{}).value||'',reg=S.authMode==='signup';
-    S.authEmail=email;
-    if(!email||!pw){toast('請輸入 Email 和密碼');return}
-    if(reg){if(pw.length<6){toast('密碼至少 6 碼');return}if(pw!==((document.getElementById('au-pw2')||{}).value||'')){toast('兩次輸入的密碼不一樣');return}}
+  if(act==='auth'){
+    const phone=v('au-phone').replace(/\D/g,'');
+    S.authPhone=v('au-phone');
+    if(phone.length<8||phone.length>15){toast(LOGIN_ERR.bad_phone);return}
     if(b.disabled)return;b.disabled=true;b.textContent='處理中…';
-    let res;
-    try{res=reg?await sb.auth.signUp({email,password:pw}):await sb.auth.signInWithPassword({email,password:pw})}
-    catch(err){res={error:err}}
-    if(res.error){toast(authMsg(res.error));b.disabled=false;b.textContent=reg?'註冊並登入':'登入';return}
-    if(reg&&!res.data.session){toast('註冊成功，但需要信箱確認才能登入，請找團隊長協助');S.authMode='login';render();return}
-    await onSession(res.data.session);
+    const reset=()=>{b.disabled=false;b.textContent='登入'};
+    try{
+      await ensureDevice();
+      const call=async create=>{const {data,error,status}=await sb.rpc('fairy_login',{p_phone:phone,p_pin:phone.slice(-6),p_create:create});if(error){error.status=status;throw error}return data};
+      let r=await call(false),isNew=false;
+      if(r&&r.error==='not_found'){
+        if(!confirm(`${phone} 是第一次使用，要用這個號碼加入嗎？\n（請再確認號碼沒有打錯）`)){reset();return}
+        r=await call(true);isNew=true;
+      }
+      if(!r||!r.ok){toast(loginMsg(r));reset();return}
+      S.authPhone='';
+      await enter(r);
+      toast(isNew?'歡迎加入飛升計畫':'登入成功');
+    }catch(err){diagAdd(err,'登入 fairy_login');toast('登入失敗：'+((err&&err.message)||'請檢查網路後再試一次'));reset()}
   }
   else if(act==='copydiag'){copyText(b.dataset.t||'')}
   else if(act==='retry'){DIAG.length=0;S.loadErr=false;S.ready=false;render();Cloud.load().catch(onLoadErr)}
-  else if(act==='logout'){await sb.auth.signOut();await onSession(null)}
+  else if(act==='logout'){if(!confirm('確定要登出這支手機？之後輸入手機號碼就能再登入。'))return;
+    const {error}=await sb.rpc('fairy_logout');if(error){diagAdd(error,'登出 fairy_logout');toast('登出沒有成功，請再試一次');return}
+    Cloud.stop();S.user=null;S.isAdmin=false;S.authMode='login';render()}
   else if(act==='goset'){S.tab='set';render()}
   else if(act==='toggleadd'){S.addOpen=!S.addOpen;render()}
   else if(act==='nmmode'){S.newMember.name=v('nm-name');S.newMember.upline=v('nm-up');S.newMember.base=v('nm-base');S.newMember.mode=+b.dataset.v;render()}
@@ -670,11 +686,8 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 render();
 (async()=>{
   if(!sb){S.fatal='雲端元件載入失敗，請確認網路後重新整理頁面。';render();return}
-  try{const {data:{session}}=await sb.auth.getSession();await onSession(session)}
-  catch(e){console.error(e);S.ready=true;render()}
-  sb.auth.onAuthStateChange((ev,session)=>{
-    if(ev==='SIGNED_IN'||ev==='SIGNED_OUT')setTimeout(()=>onSession(session),0);
-  });
+  await identify();
+  sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT')setTimeout(identify,0)});
 })();
 </script>
 </body>
