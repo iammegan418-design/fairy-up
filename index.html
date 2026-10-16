@@ -369,10 +369,13 @@ function followerSeries(m,dates){
 function latestFollowers(m){const logs=m.logs||{};const k=Object.keys(logs).filter(k=>logs[k].followers!==''&&logs[k].followers!=null).sort().pop();return k?Number(logs[k].followers):Number(m.base)||0}
 // 每位仙女依模式切成「輪」：日更 1 天一輪、兩日更 2 天一輪、三日更 3 天一輪；每輪至少發 1 支就算達標
 function modeOf(m){return Number(m&&m.mode)||1}
-function periodOf(m,d){return Math.floor(diff(S.cls.start,d)/modeOf(m))}
-function periodRange(m,i){const s=addDays(S.cls.start,i*modeOf(m));let e=addDays(s,modeOf(m)-1);if(e>S.cls.end)e=S.cls.end;return[s,e]}
-function totalPeriods(m){return S.cls?Math.ceil(totalDays()/modeOf(m)):0}
-function periodsDone(m){const logs=m.logs||{},set=new Set();if(!S.cls)return set;Object.keys(logs).forEach(d=>{if(d>=S.cls.start&&d<=S.cls.end&&Number(logs[d].videos)>=1)set.add(periodOf(m,d))});return set}
+// 以「週」為單位：開班日起每 7 天一週（10/14–10/20 為第 1 週）；每週目標＝這週天數 ÷ 模式天數（日更 7、兩日更 3、三日更 2）
+function periodOf(m,d){return Math.floor(diff(S.cls.start,d)/7)}
+function periodRange(m,i){const s=addDays(S.cls.start,i*7);let e=addDays(s,6);if(e>S.cls.end)e=S.cls.end;return[s,e]}
+function totalPeriods(m){return S.cls?Math.ceil(totalDays()/7):0}
+function weekGoal(m,i){const[s,e]=periodRange(m,i);return Math.max(1,Math.floor((diff(s,e)+1)/modeOf(m)))}
+function weekCount(m,i){const[s,e]=periodRange(m,i),logs=m.logs||{};let n=0;for(let x=s;x<=e;x=addDays(x,1))n+=Number(logs[x]&&logs[x].videos)||0;return n}
+function periodsDone(m){const set=new Set();if(!S.cls)return set;for(let i=0;i<totalPeriods(m);i++)if(weekCount(m,i)>=weekGoal(m,i))set.add(i);return set}
 function stats(m){
   const logs=m.logs||{},T=totalPeriods(m),done=periodsDone(m),t=today();
   const cur=S.cls&&t>=S.cls.start?Math.min(periodOf(m,t<S.cls.end?t:S.cls.end),T-1):-1;
@@ -398,10 +401,10 @@ function diagnose(m){
   const logged=Object.keys(logs).length;
   let s;
   if(!logged)s={cls:'s-new',state:'尚未起飛',why:'還沒有任何打卡紀錄，系統先等你的第一筆資料。',acts:['今天先拍一支，打卡時記下目前粉絲數，這就是你的起飛點','主題不用想太難：自我介紹、你為什麼開始、你的一天','選一個做得到的模式，先求不斷，再求多']};
-  else if(cons<0.6)s={cls:'s-stop',state:'更新斷層',why:`目前達標 ${st.achieved}/${st.elapsed} 次，頻率斷掉時演算法很難記住你。`,acts:[mode<3?`接下來 7 天先改成「${MODES[mode+1].name}」，穩住不中斷再拉回來`:'接下來 7 天只要求自己「有發就好」，一支也算','前一晚先把隔天要拍的主題寫在打卡備註裡','用固定格式拍（同一個開場、同一個角度），降低每支的準備時間']};
+  else if(st.elapsed>0&&cons<0.6)s={cls:'s-stop',state:'更新斷層',why:`目前達標 ${st.achieved}/${st.elapsed} 週，頻率斷掉時演算法很難記住你。`,acts:[mode<3?`接下來 7 天先改成「${MODES[mode+1].name}」，穩住不中斷再拉回來`:'接下來 7 天只要求自己「有發就好」，一支也算','前一晚先把隔天要拍的主題寫在打卡備註裡','用固定格式拍（同一個開場、同一個角度），降低每支的準備時間']};
   else if(gain7<=0&&dates.length>=4)s={cls:'s-warn',state:'平台期',why:'更新很穩，但近 7 天粉絲沒有往上，代表內容需要換角度。',acts:['只改開頭 3 秒：第一句直接說結果或反差','換一個沒拍過的主題類型（日常、問答、迷思破解輪流試）',best&&best.g>0?`回頭看 ${md(best.d)} 那支，成長最多，主題「${best.note||'未填'}」可以拍續集`:'每支在備註寫下主題，之後才看得出哪種內容有效']};
   else if(gain7>0&&gain7>prev7*1.3&&dates.length>=8)s={cls:'s-rise',state:'加速飛升',why:`近 7 天漲了 ${sign(gain7)}，比前一週更快，你找到有效的路了。`,acts:['把最近成長的主題做成系列，連拍 3 集',mode>1?`狀態好的話可以試試升級「${MODES[mode-1].name}」`:'維持日更，加入一支固定的系列單元','留言區多回覆，把新粉絲留下來']};
-  else s={cls:'s-rise',state:'穩定飛升',why:`達標 ${st.achieved}/${st.elapsed} 次，近 7 天 ${sign(gain7)}，節奏很健康。`,acts:['保持現在的頻率，不要突然加量','每週挑一支表現最好的，拆成 2 支不同角度再拍',best&&best.g>0?`${md(best.d)} 成長最多（主題「${best.note||'未填'}」），可以延伸`:'打卡時寫下主題，系統才能幫你找出最有效的內容']};
+  else s={cls:'s-rise',state:'穩定飛升',why:`達標 ${st.achieved}/${st.elapsed} 週，近 7 天 ${sign(gain7)}，節奏很健康。`,acts:['保持現在的頻率，不要突然加量','每週挑一支表現最好的，拆成 2 支不同角度再拍',best&&best.g>0?`${md(best.d)} 成長最多（主題「${best.note||'未填'}」），可以延伸`:'打卡時寫下主題，系統才能幫你找出最有效的內容']};
   return{...s,gain7,cons,best,st};
 }
 
@@ -481,27 +484,26 @@ function emptyClass(){
 /* --- check-in --- */
 function memberOptions(sel,withAll){const ms=sortedMembers();return(withAll?`<option value="all"${sel==='all'?' selected':''}>全班</option>`:`<option value="">選擇仙女</option>`)+ms.map(m=>`<option value="${m.id}"${sel===m.id?' selected':''}>${esc(m.name)}</option>`).join('')}
 function goalHint(m,d){
-  const mode=modeOf(m),p=periodOf(m,d.date),[ps,pe]=periodRange(m,p),logs=m.logs||{};
-  let other=0;for(let x=ps;x<=pe;x=addDays(x,1))if(x!==d.date)other+=Number(logs[x]&&logs[x].videos)||0;
-  if(other>0)return`<span class="goalhint ok">這一輪已完成 ✅</span>`;
-  if(d.videos>=1)return`<span class="goalhint ok">${mode===1?'今日達標':'本輪達標'}</span>`;
-  return`<span class="goalhint">${mode===1?'今天要發 1 支':`${md(ps)}–${md(pe)} 這一輪要發 1 支`}</span>`;
+  const i=periodOf(m,d.date),[ws,we]=periodRange(m,i),goal=weekGoal(m,i),logs=m.logs||{};
+  let other=0;for(let x=ws;x<=we;x=addDays(x,1))if(x!==d.date)other+=Number(logs[x]&&logs[x].videos)||0;
+  const n=other+(Number(d.videos)||0);
+  return`<span class="goalhint ${n>=goal?'ok':''}">這週 ${n}/${goal} 支${n>=goal?'，達標':''}（${md(ws)}–${md(we)}）</span>`;
 }
-// 本週戰報：照開班日每 7 天算一週；目標＝這週天數 ÷ 模式天數（日更 7、兩日更 3、三日更 2）
 function weekInfo(m){
-  const t=today(),d=t<S.cls.start?S.cls.start:(t>S.cls.end?S.cls.end:t),w=Math.floor(diff(S.cls.start,d)/7);
-  const ws=addDays(S.cls.start,w*7);let we=addDays(ws,6);if(we>S.cls.end)we=S.cls.end;
-  const days=diff(ws,we)+1,goal=Math.max(1,Math.floor(days/modeOf(m))),logs=m.logs||{};
-  let done=0;for(let x=ws;x<=we;x=addDays(x,1))done+=Number(logs[x]&&logs[x].videos)||0;
+  const t=today(),d=t<S.cls.start?S.cls.start:(t>S.cls.end?S.cls.end:t),i=periodOf(m,d),[ws,we]=periodRange(m,i);
+  const goal=weekGoal(m,i),done=weekCount(m,i),logs=m.logs||{};
   const before=followerSeries(m,[addDays(ws,-1)])[0],now=latestFollowers(m);
   const left=t>we?0:diff(t<ws?ws:t,we)+1;
-  return{w:w+1,ws,we,goal,done,left,now,wgain:now-before};
+  const postedToday=Number(logs[t]&&logs[t].videos)>0,yest=addDays(t,-1),postedYest=Number(logs[yest]&&logs[yest].videos)>0;
+  return{w:i+1,ws,we,goal,done,left,now,wgain:now-before,postedToday,postedYest};
 }
 function myReport(m){
   const k=weekInfo(m),mode=modeOf(m),st=stats(m),note=((m.logs||{})[today()]||{}).note;
   const tag=k.done>k.goal?`超標 ${k.done-k.goal} 支`:k.done===k.goal?'達標':`還差 ${k.goal-k.done} 支`;
-  let r=`✦ ${m.name}｜第 ${k.w} 週（${md(k.ws)}–${md(k.we)}）\n\n・${MODES[mode].name}目標：${k.goal} 支\n・已完成：${k.done} 支（${tag}）\n・目前粉絲：${num(k.now)}${k.wgain?`（本週 ${sign(k.wgain)}）`:''}`;
-  if(st.streak>0)r+=`\n・連續達標：${st.streak} 次`;
+  let r=`✦ ${m.name}｜第 ${k.w} 週（${md(k.ws)}–${md(k.we)}）\n\n・${MODES[mode].name}目標：${k.goal} 支\n・已完成：${k.done} 支（${tag}）`;
+  if(mode===1)r+=`\n・今天：${k.postedToday?'已發':'還沒發'}`;
+  r+=`\n・目前粉絲：${num(k.now)}${k.wgain?`（本週 ${sign(k.wgain)}）`:''}`;
+  if(st.streak>0)r+=`\n・連續達標：${st.streak} 週`;
   if(note)r+=`\n・今日拍攝：${note}`;
   return r;
 }
@@ -523,8 +525,8 @@ function viewCheckin(){
   }
   if(m){
     const st=stats(m),mode=Number(m.mode)||1,d=S.draft,lg=(m.logs||{})[d.date];
-    h+=`<div class="who"><span class="chip rose">${MODES[mode].name}</span>${m.upline?`<span class="chip">引路仙女：${esc(m.upline)}</span>`:''}${st.streak>1?`<span class="chip gold">連續達標 ${st.streak} 次</span>`:''}</div>`;
-    h+=`<div class="stats"><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>開班至今</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標次數</span></div><div class="stat"><b>${st.videos}</b><span>累積支數</span></div></div>`;
+    h+=`<div class="who"><span class="chip rose">${MODES[mode].name}</span>${m.upline?`<span class="chip">引路仙女：${esc(m.upline)}</span>`:''}${st.streak>1?`<span class="chip gold">連續達標 ${st.streak} 週</span>`:''}</div>`;
+    h+=`<div class="stats"><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>開班至今</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標週數</span></div><div class="stat"><b>${st.videos}</b><span>累積支數</span></div></div>`;
     h+=`<label for="d-date">打卡日期</label><input type="date" id="d-date" data-draft="date" value="${d.date}" min="${S.cls.start}" max="${t<S.cls.end?t:S.cls.end}">`;
     if(lg)h+=`<p class="muted" style="margin:6px 0 0">這天已經打過卡，送出會更新紀錄。</p>`;
     h+=`<label>這天發了幾支短影音</label><div class="stepper"><button type="button" data-act="vid" data-v="-1" aria-label="減少">−</button><output>${d.videos}</output><button type="button" data-act="vid" data-v="1" aria-label="增加">＋</button>${goalHint(m,d)}</div>`;
@@ -549,7 +551,7 @@ function viewChart(){
     h+=`<div class="chart">${chartSVG({dates,line:ts.line,bars:ts.bars,goal:ms.length})}</div><div class="legend"><span><i style="background:var(--rose)"></i>全班粉絲總數</span><span><i style="background:var(--mint)"></i>當天打卡人數</span></div>`;
   }else{
     const m=S.members[S.chartSel],st=stats(m),mode=Number(m.mode)||1;
-    h+=`<div class="stats"><div class="stat"><b>${num(st.base)}</b><span>起始粉絲</span></div><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>成長</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標次數</span></div></div>`;
+    h+=`<div class="stats"><div class="stat"><b>${num(st.base)}</b><span>起始粉絲</span></div><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>成長</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標週數</span></div></div>`;
     h+=`<div class="chart">${chartSVG({dates,line:followerSeries(m,dates),bars:dates.map(d=>Number((m.logs||{})[d]?.videos)||0),goal:1})}</div><div class="legend"><span><i style="background:var(--rose)"></i>粉絲數</span><span><i style="background:var(--mint)"></i>當天發片支數</span><span>${MODES[mode].name}：${MODES[mode].desc}</span></div>`;
   }
   return h+`</div>`;
@@ -670,13 +672,13 @@ function viewScript(){
 function viewAll(){
   const ms=sortedMembers().map(m=>({m,st:stats(m)})).sort((a,b)=>b.st.gain-a.st.gain);
   const T=totalDays(),fin=ended();
-  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2>${S.isAdmin?`<button class="btn small" data-act="line">複製全班戰報</button>`:''}</div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一輪都達標（日更每天、兩日更每兩天、三日更每三天，至少發 1 支）。'}</p>`;
+  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2>${S.isAdmin?`<button class="btn small" data-act="line">複製全班戰報</button>`:''}</div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一週都達標（日更每週 7 支、兩日更 3 支、三日更 2 支）。'}</p>`;
   if(!ms.length)return h+`<p class="muted">還沒有成員。</p></div>`;
   ms.forEach(({m,st})=>{
     const mode=Number(m.mode)||1,TP=st.total,pct=TP?Math.round(st.allAchieved/TP*100):0,complete=st.allAchieved>=TP;
     h+=`<div class="mcard"><div><div class="mname">${esc(m.name)}</div><div class="mmeta">${MODES[mode].name}${m.upline?`｜引路仙女 ${esc(m.upline)}`:''}｜${num(st.base)} → ${num(st.now)}</div></div><div class="mgain ${st.gain<0?'neg':''}">${sign(st.gain)}</div>
     <div class="bar"><i style="width:${pct}%;${complete?'background:var(--mint)':''}"></i></div>
-    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${TP} 次 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
+    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${TP} 週 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
     if(S.editing===m.id&&canEdit(m)){
       h+=`<div class="editbox"><label for="e-name">名字</label><input type="text" id="e-name" value="${esc(m.name)}" maxlength="30"><label for="e-up">引路仙女</label><input type="text" id="e-up" value="${esc(m.upline||'')}" maxlength="30">
       <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${MODES[k].name}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
@@ -691,25 +693,19 @@ function viewAll(){
 const normName=x=>String(x||'').replace(/\s+/g,'').toLowerCase();
 function sameName(a,b){a=normName(a);b=normName(b);if(!a||!b)return false;if(a===b)return true;const s=a.length<b.length?a:b,l=a.length<b.length?b:a;return s.length>=2&&l.includes(s)}
 function rosterMissing(){const r=(S.cls&&S.cls.roster)||[],ms=sortedMembers();return r.filter(n=>!ms.some(m=>sameName(n,m.name)))}
-function roundStatus(m){
-  const t=today(),d=t<S.cls.end?t:S.cls.end,i=periodOf(m,d),[ps,pe]=periodRange(m,i);
-  if(periodsDone(m).has(i))return{k:'done'};
-  if(pe<=t)return{k:'due'};
-  return{k:'open',pe};
-}
 function lineReport(){
-  const t=today(),all=sortedMembers().map(m=>({m,st:stats(m),rs:roundStatus(m)}));
-  const gain=all.reduce((a,x)=>a+x.st.gain,0),missing=rosterMissing(),total=all.length+missing.length;
-  const done=all.filter(x=>x.rs.k==='done').sort((a,b)=>b.st.gain-a.st.gain);
-  const open=all.filter(x=>x.rs.k==='open'),due=all.filter(x=>x.rs.k==='due');
-  const g=x=>x.st.gain?`粉絲 ${sign(x.st.gain)}`:'';
-  let s=`✨ ${S.cls.name}｜${ended()?'已結業':`第 ${dayNo()} 天 / 共 ${totalDays()} 天`}（${md(t)}）\n本輪已完成 ${done.length} / ${total} 人\n`;
-  if(done.length)s+=`\n✅ 已完成\n`+done.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}）${g(x)}`).join('\n')+'\n';
-  if(open.length)s+=`\n⏳ 本輪還有時間\n`+open.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}，${md(x.rs.pe)} 前發 1 支）`).join('\n')+'\n';
-  const behind=[...due.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}，今天截止）`),...missing.map(n=>`${n}（還沒加入打卡）`)];
-  if(behind.length)s+=`\n💪 以下的寶寶還需努力唷，等你跟上\n`+behind.map((x,i)=>`${i+1}. ${x}`).join('\n')+'\n';
-  if(ended()){const fin=all.filter(x=>x.st.allAchieved>=x.st.total);s+=`\n🏆 完成飛升 ${fin.length} 人${fin.length?'：'+fin.map(x=>x.m.name).join('、'):''}\n`}
-  s+=`\n🚀 全班累積漲粉 ${sign(gain)}`;
+  const t=today(),all=sortedMembers().map(m=>({m,k:weekInfo(m),st:stats(m)}));
+  const missing=rosterMissing(),total=all.length+missing.length,k0=all[0]&&all[0].k;
+  const done=all.filter(x=>x.k.done>=x.k.goal).sort((a,b)=>b.k.done-b.k.goal-(a.k.done-a.k.goal));
+  const todo=all.filter(x=>x.k.done<x.k.goal);
+  const wk=k0?`第 ${k0.w} 週（${md(k0.ws)}–${md(k0.we)}）`:'';
+  let s=`✦ ${S.cls.name}｜${wk}\n今天 ${md(t)}，本週還有 ${k0?k0.left:0} 天\n\n已達標 ${done.length} / ${total} 人\n`;
+  if(done.length)s+=`\n【已達標】\n`+done.map(x=>`・${x.m.name}（${MODES[modeOf(x.m)].name}）${x.k.done}/${x.k.goal} 支${x.k.done>x.k.goal?' 超標':''}`).join('\n')+'\n';
+  const behind=[...todo.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}）${x.k.done}/${x.k.goal} 支，還差 ${x.k.goal-x.k.done} 支${modeOf(x.m)===1&&!x.k.postedToday?'，今天還沒發':''}`),...missing.map(n=>`${n}（還沒加入打卡）`)];
+  if(behind.length)s+=`\n以下的寶寶還需努力唷，等你跟上\n`+behind.map((x,i)=>`${i+1}. ${x}`).join('\n')+'\n';
+  if(ended()){const fin=all.filter(x=>x.st.allAchieved>=x.st.total);s+=`\n【完成飛升】${fin.length} 人${fin.length?'：'+fin.map(x=>x.m.name).join('、'):''}\n`}
+  const gain=all.reduce((a,x)=>a+x.st.gain,0);
+  s+=`\n全班累積漲粉 ${sign(gain)}`;
   return s;
 }
 
