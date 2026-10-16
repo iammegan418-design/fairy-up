@@ -131,6 +131,19 @@ textarea{min-height:70px;resize:vertical}
 .hook{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line)}
 .hook:last-child{border-bottom:0}
 .pre{white-space:pre-wrap}
+.myrep{margin-top:14px;padding:14px;border-radius:14px;background:var(--rose-soft);display:grid;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chipbtn{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;font-size:.82rem;cursor:pointer}
+.chipbtn:hover{border-color:var(--rose)}
+.sctable{display:grid;gap:0}
+.scrow{display:grid;grid-template-columns:84px 1fr;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.scrow:last-child{border-bottom:0}
+.scsec{font-weight:700;font-variant-numeric:tabular-nums;font-size:.9rem}
+.scsec small{display:block;font-weight:500;color:var(--soft);font-size:.78rem}
+.scbody{min-width:0;display:grid;gap:4px}
+.checks{margin:0;padding-left:1.3em;display:grid;gap:4px}
+.checks b{margin-right:6px}
+.emo{display:inline-block;margin-top:4px;font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--rose-soft);color:var(--rose)}
 
 /* Overview */
 .mcard{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--line)}
@@ -215,10 +228,10 @@ const sb=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,
 const S={ready:false,user:null,isAdmin:false,loadErr:false,fatal:'',authMode:'login',authPhone:'',lastProfile:null,
   classId:null,cls:null,members:{},tab:'checkin',
   sel:'',addOpen:false,draft:{date:today(),videos:0,followers:'',note:''},newMember:{mode:1},
-  chartSel:'all',guideSel:'',ai:null,aiBusy:false,aiTopic:'',aiGoal:'漲粉曝光',editing:null};
+  chartSel:'all',guideSel:'',sc:{type:'pain'},scOut:null,editing:null};
 
 /* ---------- cloud storage ---------- */
-const toCls=r=>r?{name:r.name,start:r.start_date,end:r.end_date,createdAt:r.created_at}:null;
+const toCls=r=>r?{name:r.name,start:r.start_date,end:r.end_date,createdAt:r.created_at,roster:Array.isArray(r.roster)?r.roster:[],hasRoster:'roster' in r}:null;
 const toMem=r=>({name:r.name,upline:r.upline||'',mode:Number(r.mode)||1,base:Number(r.base)||0,logs:r.logs||{},personId:r.person_id,createdAt:r.created_at});
 function myId(){const e=Object.entries(S.members).find(([,m])=>S.user&&m.personId===S.user.id);return e?e[0]:''}
 function fail(error,step,status){if(error){error.step=step||error.step||'';if(status!=null)error.status=status;throw error}}
@@ -250,6 +263,10 @@ const Cloud={
   async newClass(d){
     const {error:e1}=await sb.from('fairy_classes').update({is_current:false}).eq('is_current',true);fail(e1);
     const {error}=await sb.from('fairy_classes').insert({name:d.name,start_date:d.start,end_date:d.end,is_current:true});fail(error);
+    await this.load();
+  },
+  async saveRoster(list){
+    const {data,error}=await sb.from('fairy_classes').update({roster:list}).eq('id',S.classId).select('id');fail(error,'儲存群組名單');mustHit(data);
     await this.load();
   },
   async saveClass(d){
@@ -470,6 +487,24 @@ function goalHint(m,d){
   if(d.videos>=1)return`<span class="goalhint ok">${mode===1?'今日達標':'本輪達標'}</span>`;
   return`<span class="goalhint">${mode===1?'今天要發 1 支':`${md(ps)}–${md(pe)} 這一輪要發 1 支`}</span>`;
 }
+// 本週戰報：照開班日每 7 天算一週；目標＝這週天數 ÷ 模式天數（日更 7、兩日更 3、三日更 2）
+function weekInfo(m){
+  const t=today(),d=t<S.cls.start?S.cls.start:(t>S.cls.end?S.cls.end:t),w=Math.floor(diff(S.cls.start,d)/7);
+  const ws=addDays(S.cls.start,w*7);let we=addDays(ws,6);if(we>S.cls.end)we=S.cls.end;
+  const days=diff(ws,we)+1,goal=Math.max(1,Math.floor(days/modeOf(m))),logs=m.logs||{};
+  let done=0;for(let x=ws;x<=we;x=addDays(x,1))done+=Number(logs[x]&&logs[x].videos)||0;
+  const before=followerSeries(m,[addDays(ws,-1)])[0],now=latestFollowers(m);
+  const left=t>we?0:diff(t<ws?ws:t,we)+1;
+  return{w:w+1,ws,we,goal,done,left,now,wgain:now-before};
+}
+function myReport(m){
+  const k=weekInfo(m),mode=modeOf(m),st=stats(m),note=((m.logs||{})[today()]||{}).note;
+  const tag=k.done>k.goal?`超標 ${k.done-k.goal} 支`:k.done===k.goal?'達標':`還差 ${k.goal-k.done} 支`;
+  let r=`✦ ${m.name}｜第 ${k.w} 週（${md(k.ws)}–${md(k.we)}）\n\n・${MODES[mode].name}目標：${k.goal} 支\n・已完成：${k.done} 支（${tag}）\n・目前粉絲：${num(k.now)}${k.wgain?`（本週 ${sign(k.wgain)}）`:''}`;
+  if(st.streak>0)r+=`\n・連續達標：${st.streak} 次`;
+  if(note)r+=`\n・今日拍攝：${note}`;
+  return r;
+}
 function viewCheckin(){
   const ms=sortedMembers(),t=today(),mine=myId();
   S.sel=mine;
@@ -496,6 +531,7 @@ function viewCheckin(){
     h+=`<label for="d-f">目前粉絲數</label><input type="number" id="d-f" data-draft="followers" inputmode="numeric" min="0" value="${esc(d.followers)}" placeholder="${st.now}">`;
     h+=`<label for="d-note">今天的主題（之後用來分析哪種內容有效）</label><input type="text" id="d-note" data-draft="note" maxlength="60" value="${esc(d.note)}" placeholder="例：早餐開箱、穿搭、問答">`;
     h+=`<button class="btn rose block" data-act="checkin">完成打卡</button>`;
+    h+=`<div class="myrep"><div class="pre">${esc(myReport(m))}</div><button class="btn block" data-act="myrep">複製我的本週戰報</button></div>`;
   }
   h+=`</div><div class="panel"><h3>今日已打卡 ${done.length} / ${ms.length}</h3><div class="donelist">${done.map(x=>`<span class="chip ${Number(x.logs[t].videos)>=1?'mint':''}">${esc(x.name)}</span>`).join('')||'<span class="muted">今天還沒有人打卡，當第一個吧</span>'}</div></div>`;
   return h;
@@ -527,53 +563,114 @@ function viewGuide(){
   const m=S.members[S.guideSel],dg=diagnose(m);
   let h=`<h2>仙女指引</h2><label for="gsel" style="margin-top:0">檢測對象</label><select id="gsel" data-bind="guideSel">${memberOptions(S.guideSel)}</select><div style="height:12px"></div>`;
   h+=`<div class="diag ${dg.cls}"><span class="muted">方向檢測</span><div class="state">${dg.state}</div><div>${esc(dg.why)}</div><ol>${dg.acts.map(a=>`<li>${esc(a)}</li>`).join('')}</ol></div>`;
-  h+=`<div class="panel"><h3>幫我想文案</h3><p class="muted" style="margin:0">輸入想拍的主題，會依照你目前的狀態給方向、開頭和貼文文案。</p>
-  <label for="ai-t">想拍的主題或產品</label><input type="text" id="ai-t" data-bind="aiTopic" value="${esc(S.aiTopic)}" maxlength="60" placeholder="例：上班族早餐怎麼吃、出國行李開箱">
-  <label for="ai-g">這支想達成什麼</label><select id="ai-g" data-bind="aiGoal">${['漲粉曝光','建立信任','生活感分享','引導私訊'].map(g=>`<option${S.aiGoal===g?' selected':''}>${g}</option>`).join('')}</select>
-  <button class="btn rose block" data-act="ai" ${S.aiBusy?'disabled':''}>${S.aiBusy?'正在想文案…':'產生文案方向'}</button>`;
-  if(S.ai){
-    const r=S.ai;
-    h+=`<div class="out">${r.offline?'<p class="muted">以下是範本版本，可以依自己的狀況修改。</p>':''}
-    <div class="outblock"><h3>拍攝方向</h3><div class="pre">${esc(r.direction)}</div></div>
-    <div class="outblock"><h3>開頭 3 秒</h3>${(r.hooks||[]).map((x,i)=>`<div class="hook"><span>${esc(x)}</span><button class="btn ghost small" data-act="copy" data-k="hook" data-i="${i}">複製</button></div>`).join('')}</div>
-    <div class="outblock"><h3>貼文文案 <button class="btn ghost small" data-act="copy" data-k="caption">複製</button></h3><div class="pre">${esc(r.caption)}</div></div>
-    <div class="outblock"><h3>接下來可以拍</h3><ol style="margin:0;padding-left:1.3em">${(r.nextTopics||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div></div>`;
+  h+=viewScript();
+  return h;
+}
+/* --- 腳本小幫手：照結構一格一格填，產出分段腳本、開頭、標題、文案 --- */
+const SC_TYPES={
+  pain:{name:'痛點解決型',fit:'料理、保養、生活困擾',desc:'痛點 → 共鳴 → 疑問 → 先給結果 → 公布答案 → 適合誰 → 改變 → 真實 → 行動'},
+  curious:{name:'好奇揭曉型',fit:'好物、開箱、生活小物',desc:'好奇 → 期待 → 信任 → 行動：答案留到中間才揭曉'},
+  scene:{name:'生活場景型',fit:'一天、日常、Vlog',desc:'開場 → 問題 → 大綱 → 3 個場景 → 成果 → 心得，照比例分配時間'}
+};
+const SC_PAINS=['沒時間','每天很累','熬夜','怕變老','身材焦慮','存不到錢','想變漂亮','想多賺一點','不知道怎麼選'];
+const SC_FIELDS=[
+  ['topic','這支要拍什麼（短短幾個字）','例：10 分鐘鮪魚小黃瓜海苔捲'],
+  ['who','拍給誰看','例：下班累到不想煮的上班族'],
+  ['pain','他們的煩惱','例：沒時間煮，又想吃清爽一點'],
+  ['how','你的做法或用的東西','例：海苔包小黃瓜、鮪魚、玉米'],
+  ['result','做完的結果或感受（不寫功效）','例：10 分鐘一餐，吃完很清爽'],
+  ['time','你持續多久了（可以不填）','例：一個月']
+];
+function scBuild(){
+  const c=S.sc,f=(k,ph)=>(c[k]||'').trim()||`（${ph}）`;
+  const topic=f('topic','主題'),who=f('who','你的觀眾'),pain=f('pain','煩惱'),how=f('how','你的做法'),result=f('result','結果'),time=(c.time||'').trim();
+  // 每段：[秒數, 目的, 情緒, 說什麼, 畫面怎麼拍]
+  let rows;
+  if(c.type==='curious'){
+    rows=[
+      ['1–5 秒','吸引停留','好奇',`「${who}最近都在做的一件事，你知道是什麼嗎？」`,'最有畫面的一瞬間，先不露出答案'],
+      ['5–10 秒','畫面衝擊','好奇',`不用說話，直接拍過程：${how}`,'過程特寫、前後對比、真實生活畫面'],
+      ['10–15 秒','說出觀眾心聲','好奇','「這樣真的有差嗎？」「我也做得到嗎？」','你看鏡頭、挑眉或歪頭'],
+      ['15–20 秒','先給結果','慾望',`「現在的我，${result}」`,'只拍改變後的樣子，還不露出東西本身'],
+      ['20–30 秒','揭曉答案','信任',`「答案就是：${topic}」`,'這時候才讓東西或做法正式出場'],
+      ['30–40 秒','分族群','認同',`「如果你是${who}，或常常${pain}，你會最有感」`,'不同情境的生活畫面'],
+      ['40–50 秒','說好處','利益','「對我來說最大的改變是＿＿」（說一件生活裡的小事）','生活前後對比'],
+      ['50–55 秒','真實分享','真實',`「${time?`我已經持續${time}了`:'我自己是真的每天在用'}」`,'重複出現在生活裡的畫面'],
+      ['55–60 秒','邀請行動','行動','「想知道細節的，留言或私訊我」','你笑著看鏡頭']
+    ];
+  }else if(c.type==='scene'){
+    rows=[
+      ['開場 5%','拍攝原因','好奇',`「最近好多人問我${topic}，今天一次說清楚」`,'第一句就講重點，不要從自我介紹慢慢鋪陳'],
+      ['問題 10–15%','遇到的問題','認同',`「${who}最常遇到的就是${pain}」`,'一個以前困擾你的畫面'],
+      ['大綱 5%','預告流程','好奇','「我分成 3 個部分，一個一個說」','字卡：① ② ③'],
+      ['做法 30%','場景 A／B／C','利益',`每個場景：先一句總結，再給一個細節（${how}）`,'A、B、C 各拍一個全景＋一個特寫'],
+      ['成果 20%','成果展示','慾望',`「這樣下來，${result}」`,'完成後的畫面'],
+      ['結尾 20%','心得＋評論','真實',`「${time?`我已經這樣${time}了，`:''}你也可以試試看，有問題私訊我」`,'對鏡頭說真心話']
+    ];
+  }else{
+    rows=[
+      ['1–5 秒','說出痛點','恐懼',`「${who}，是不是常常${pain}？」`,'你最困擾的那一瞬間'],
+      ['5–10 秒','共鳴','認同','「我以前也是這樣，＿＿」（說一個你自己的真實畫面）','以前的狀態'],
+      ['10–15 秒','提出疑問','好奇','「到底是哪裡出了問題？是方法不對，還是＿＿？」','你看鏡頭、思考的表情'],
+      ['15–20 秒','先給結果','慾望',`「現在的我，${result}」`,'用畫面說話，先讓人看到結果'],
+      ['20–30 秒','公布答案','信任',`「後來我發現關鍵是：${how}」`,'拆成步驟畫面，這時候才露出東西'],
+      ['30–40 秒','說適合誰','認同',`「如果你也是${who}，你應該會很有感」`,'生活使用的畫面'],
+      ['40–50 秒','說改變','利益','「我最有感的是＿＿」（生活裡的一個小改變）','生活前後對比'],
+      ['50–55 秒','真實證據','真實',`「${time?`我已經持續${time}了`:'我自己是真的天天在做'}」`,'重複出現在生活裡的畫面'],
+      ['55–60 秒','邀請行動','行動','「想知道我怎麼做，留言或私訊我」','你笑著看鏡頭']
+    ];
+  }
+  // 開頭：依情緒各給一句，挑一句最像你的
+  const hooks=[
+    ['好奇',`${who}都在偷偷做的一件事`],
+    ['恐懼',`${pain}的人，這件事千萬別再做錯`],
+    ['反差',`我以為${topic}很麻煩，結果完全相反`],
+    ['認同',`${who}，是不是常常${pain}？`],
+    ['利益',`只要 3 個步驟，${result}`],
+    ['故事',`我以前天天${pain}，直到我開始這樣做`]
+  ];
+  const titles=[`給${who}：${topic}`,`${pain}？我靠這 3 個步驟`,time?`持續${time}，${result}`:`${topic}：${result}`];
+  const caption=`${who}，是不是常常${pain}？\n\n我以前也是，後來我試了：${how}\n現在${result} 🤍\n\n如果你也是${who}，可以試試看\n想知道細節的，私訊我～\n\n#仙女日常 #真實分享`;
+  const scriptText=`🎬 ${topic}｜${SC_TYPES[c.type].name}\n\n`+rows.map(r=>`【${r[0]}｜${r[1]}｜${r[2]}】\n說：${r[3]}\n拍：${r[4]}`).join('\n\n');
+  return{rows,hooks,titles,caption,scriptText};
+}
+function viewScript(){
+  const c=S.sc,ty=SC_TYPES[c.type];
+  let h=`<div class="panel"><h3>腳本小幫手</h3><p class="muted" style="margin:0">一格一格填，幫你排出 60 秒的分段腳本、開頭、標題和文案。每格寫短短一句就好。</p>
+  <label>選腳本類型</label><div class="modes">${Object.entries(SC_TYPES).map(([k,t])=>`<button type="button" class="mode" aria-pressed="${c.type===k}" data-act="sctype" data-v="${k}"><b>${t.name}</b><span>${t.fit}</span></button>`).join('')}</div>
+  <p class="muted" style="margin:8px 0 0">${ty.desc}</p>`;
+  SC_FIELDS.forEach(([k,l,ph])=>{
+    h+=`<label for="sc-${k}">${l}</label><input type="text" id="sc-${k}" data-sc="${k}" value="${esc(c[k]||'')}" maxlength="40" placeholder="${ph}">`;
+    if(k==='pain')h+=`<div class="chips">${SC_PAINS.map(p=>`<button type="button" class="chipbtn" data-act="scpain" data-v="${p}">${p}</button>`).join('')}</div>`;
+  });
+  h+=`<button class="btn rose block" data-act="scgen">排出我的腳本</button>`;
+  if(S.scOut){
+    const o=S.scOut;
+    h+=`<div class="out">
+    <div class="outblock"><h3>分段腳本 <button class="btn ghost small" data-act="sccopy" data-k="script">複製整份</button></h3>
+    <div class="sctable">${o.rows.map(r=>`<div class="scrow"><div class="scsec">${r[0]}<small>${r[1]}</small><span class="emo">${r[2]}</span></div><div class="scbody"><div>${esc(r[3])}</div><div class="muted">📱 ${esc(r[4])}</div></div></div>`).join('')}</div></div>
+    <div class="outblock"><h3>開頭 3 秒（挑一句最像你的）</h3>${o.hooks.map((x,i)=>`<div class="hook"><span><span class="emo">${x[0]}</span> ${esc(x[1])}</span><button class="btn ghost small" data-act="sccopy" data-k="hook" data-i="${i}">複製</button></div>`).join('')}</div>
+    <div class="outblock"><h3>封面標題</h3>${o.titles.map((x,i)=>`<div class="hook"><span>${esc(x)}</span><button class="btn ghost small" data-act="sccopy" data-k="title" data-i="${i}">複製</button></div>`).join('')}<p class="muted" style="margin:6px 0 0">標題用直接的字、能放數字就放數字，一眼看懂最重要。</p></div>
+    <div class="outblock"><h3>貼文文案 <button class="btn ghost small" data-act="sccopy" data-k="caption">複製</button></h3><div class="pre">${esc(o.caption)}</div></div>
+    <div class="outblock"><h3>拍之前：主題健檢</h3><ul class="checks">
+      <li><b>大家會想聊嗎？</b>是很多人都在意的事</li>
+      <li><b>有沒有一點反差或驚喜？</b>跟大家以為的不一樣</li>
+      <li><b>看完有收穫嗎？</b>讓人有「原來如此」的感覺</li>
+      <li><b>一般人都看得懂嗎？</b>不用懂專業也聽得懂</li>
+      <li><b>一句話講得完嗎？</b>用直接的字、能放數字就放數字</li></ul></div>
+    <div class="outblock"><h3>剪輯時：照這個順序</h3><ol class="checks">
+      <li>先剪掉用不到的片段</li><li>刪掉停頓和「嗯…」</li><li>同樣意思的話只留一句</li><li>補上生活畫面（空鏡頭）</li><li>上字幕，重點字放大或換色</li><li>加字卡：補充說明或小小吐槽自己</li></ol>
+      <p class="muted" style="margin:6px 0 0">每一段都問自己：我想表達的，是不是觀眾想看的？不是就剪掉。不寫功效、不放連結。</p></div>
+    </div>`;
   }
   return h+`</div>`;
-}
-async function runAI(){
-  const m=S.members[S.guideSel];if(!m)return;
-  const topic=S.aiTopic.trim();if(!topic){toast('先輸入想拍的主題');return}
-  const dg=diagnose(m),mode=Number(m.mode)||1;
-  const recent=Object.keys(m.logs||{}).sort().slice(-6).map(d=>m.logs[d].note).filter(Boolean);
-  S.aiBusy=true;S.ai=null;render();
-  let sample=null;
-  try{sample=(window.claude&&window.claude.use)?await window.claude.use('sample'):null}catch(e){sample=null}
-  if(sample){
-    const prompt=`你是台灣短影音經營教練，幫「仙女團隊」的夥伴想下一支短影音。請用台灣繁體中文、口語、親切。
-夥伴狀態：更新模式「${MODES[mode].name}」（${MODES[mode].desc}），起始粉絲 ${dg.st.base}，目前 ${dg.st.now}，近7天變化 ${dg.gain7}，達標 ${dg.st.achieved}/${dg.st.elapsed} 天，系統判定「${dg.state}」。
-最近拍過的主題：${recent.join('、')||'沒有紀錄'}${dg.best&&dg.best.note?`；成長最多的一天主題：${dg.best.note}`:''}
-這次想拍：${topic}；目的：${S.aiGoal}
-規則：不可寫任何醫療、療效、減重公斤數、保證效果等宣稱；不放連結；不硬銷；以真實生活與個人經驗為主。
-只回傳 JSON，不要其他文字：{"direction":"80字內，說明這支怎麼拍、為什麼適合她現在的狀態","hooks":["3句開頭，每句20字內"],"caption":"貼文文案120字內，可含2-3個hashtag","nextTopics":["3個延伸主題"]}`;
-    try{S.ai=await sample.json(prompt,{modelTier:'quick'})}
-    catch(e){S.ai=offlineAI(topic,dg)}
-  }else S.ai=offlineAI(topic,dg);
-  S.aiBusy=false;render();
-}
-function offlineAI(t,dg){
-  return{offline:true,
-    direction:`${dg.state==='平台期'?'這支只改開頭：第一句直接講結論或反差。':dg.state==='更新斷層'?'先求拍得出來：一個鏡頭、一個重點、30 秒內。':'用你最自然的生活場景拍，讓人感覺在跟朋友聊天。'}主題：${t}`,
-    hooks:[`關於${t}，我以前也做錯過`,`如果你也在想${t}，先看完這支`,`${t}，我真實分享我的做法`],
-    caption:`今天想聊聊「${t}」\n這是我自己的真實經驗，不一定適合每個人，但希望對你有一點幫助\n你也有類似的經驗嗎？留言跟我說 🤍\n#仙女日常 #真實分享`,
-    nextTopics:[`${t}的常見迷思`,`我的${t}前後對比心得`,`粉絲問最多的${t}問題`]};
 }
 
 /* --- overview --- */
 function viewAll(){
   const ms=sortedMembers().map(m=>({m,st:stats(m)})).sort((a,b)=>b.st.gain-a.st.gain);
   const T=totalDays(),fin=ended();
-  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2><button class="btn small" data-act="line">複製 LINE 戰報</button></div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一輪都達標（日更每天、兩日更每兩天、三日更每三天，至少發 1 支）。'}</p>`;
+  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2>${S.isAdmin?`<button class="btn small" data-act="line">複製全班戰報</button>`:''}</div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一輪都達標（日更每天、兩日更每兩天、三日更每三天，至少發 1 支）。'}</p>`;
   if(!ms.length)return h+`<p class="muted">還沒有成員。</p></div>`;
   ms.forEach(({m,st})=>{
     const mode=Number(m.mode)||1,TP=st.total,pct=TP?Math.round(st.allAchieved/TP*100):0,complete=st.allAchieved>=TP;
@@ -590,13 +687,29 @@ function viewAll(){
   });
   return h+`</div>`;
 }
+// 群組名單比對：名字互相包含就算同一人（例：名單「邱婉婷」對到打卡名字「婉婷」）
+const normName=x=>String(x||'').replace(/\s+/g,'').toLowerCase();
+function sameName(a,b){a=normName(a);b=normName(b);if(!a||!b)return false;if(a===b)return true;const s=a.length<b.length?a:b,l=a.length<b.length?b:a;return s.length>=2&&l.includes(s)}
+function rosterMissing(){const r=(S.cls&&S.cls.roster)||[],ms=sortedMembers();return r.filter(n=>!ms.some(m=>sameName(n,m.name)))}
+function roundStatus(m){
+  const t=today(),d=t<S.cls.end?t:S.cls.end,i=periodOf(m,d),[ps,pe]=periodRange(m,i);
+  if(periodsDone(m).has(i))return{k:'done'};
+  if(pe<=t)return{k:'due'};
+  return{k:'open',pe};
+}
 function lineReport(){
-  const t=today(),ms=sortedMembers().map(m=>({m,st:stats(m)})).filter(x=>x.st.today).sort((a,b)=>b.st.gain-a.st.gain);
-  const all=sortedMembers(),gain=all.reduce((a,m)=>a+stats(m).gain,0);
-  let s=`✨ 仙女飛升計畫｜${S.cls.name}\n${ended()?'已結業':`第 ${dayNo()} 天 / 共 ${totalDays()} 天`}（${md(t)}）\n今日已打卡 ${ms.length} 人\n\n`;
-  ms.forEach((x,i)=>{const mode=Number(x.m.mode)||1,l=x.m.logs[t];s+=`${i+1}. ${x.m.name}${x.m.upline?`（上家 ${x.m.upline}）`:''}\n　${MODES[mode].name} ${Number(l.videos)>=1?'✅':'⏳'} 今日 ${l.videos} 支｜粉絲 ${num(x.st.now)}（${sign(x.st.gain)}）\n`});
-  if(ended()){const done=all.filter(m=>{const x=stats(m);return x.allAchieved>=x.total});s+=`\n🏆 完成飛升 ${done.length} 人${done.length?'：'+done.map(m=>m.name).join('、'):''}\n`}
-  s+=`\n全班累積漲粉 ${sign(gain)} 🚀`;
+  const t=today(),all=sortedMembers().map(m=>({m,st:stats(m),rs:roundStatus(m)}));
+  const gain=all.reduce((a,x)=>a+x.st.gain,0),missing=rosterMissing(),total=all.length+missing.length;
+  const done=all.filter(x=>x.rs.k==='done').sort((a,b)=>b.st.gain-a.st.gain);
+  const open=all.filter(x=>x.rs.k==='open'),due=all.filter(x=>x.rs.k==='due');
+  const g=x=>x.st.gain?`粉絲 ${sign(x.st.gain)}`:'';
+  let s=`✨ ${S.cls.name}｜${ended()?'已結業':`第 ${dayNo()} 天 / 共 ${totalDays()} 天`}（${md(t)}）\n本輪已完成 ${done.length} / ${total} 人\n`;
+  if(done.length)s+=`\n✅ 已完成\n`+done.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}）${g(x)}`).join('\n')+'\n';
+  if(open.length)s+=`\n⏳ 本輪還有時間\n`+open.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}，${md(x.rs.pe)} 前發 1 支）`).join('\n')+'\n';
+  const behind=[...due.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}，今天截止）`),...missing.map(n=>`${n}（還沒加入打卡）`)];
+  if(behind.length)s+=`\n💪 以下的寶寶還需努力唷，等你跟上\n`+behind.map((x,i)=>`${i+1}. ${x}`).join('\n')+'\n';
+  if(ended()){const fin=all.filter(x=>x.st.allAchieved>=x.st.total);s+=`\n🏆 完成飛升 ${fin.length} 人${fin.length?'：'+fin.map(x=>x.m.name).join('、'):''}\n`}
+  s+=`\n🚀 全班累積漲粉 ${sign(gain)}`;
   return s;
 }
 
@@ -609,6 +722,10 @@ function viewSet(){
     return h+`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">每天到「修煉打卡」填寫自己的支數和粉絲數。資料存在雲端，換手機時輸入同一個手機號碼登入就看得到。</p></div>`;
   }
   if(c)h+=`<div class="panel"><h2>目前班級</h2><label for="c-name">班級名稱</label><input type="text" id="c-name" value="${esc(c.name)}" maxlength="30"><div class="row"><div><label for="c-s">開始</label><input type="date" id="c-s" value="${c.start}"></div><div><label for="c-e">結束</label><input type="date" id="c-e" value="${c.end}"></div></div><button class="btn block" data-act="saveclass">儲存班級設定</button></div>`;
+  if(c){const miss=rosterMissing();h+=`<div class="panel"><h2>群組名單</h2><p class="muted" style="margin:0">把 LINE 群組裡的夥伴名字貼上來，一行一位。LINE 戰報就會列出「還沒加入打卡」的人。名字寫短一點比較好對，例如「邱婉婷」可以對到打卡名字「婉婷」。</p>
+  <label for="c-roster">群組成員（一行一位）</label><textarea id="c-roster" rows="8" placeholder="巧穎&#10;Mia&#10;婉婷">${esc((c.roster||[]).join('\n'))}</textarea>
+  <div class="row" style="margin-top:10px;gap:8px;display:flex;flex-wrap:wrap"><button class="btn ghost small" data-act="rosterfill">帶入已加入的人</button><button class="btn small" data-act="saveroster">儲存名單</button></div>
+  ${(c.roster||[]).length?`<p class="muted" style="margin:10px 0 0">名單 ${c.roster.length} 人，${miss.length?`還沒加入打卡：${esc(miss.join('、'))}`:'全部都已加入 🎉'}</p>`:''}</div>`}
   h+=`<div class="panel"><h2>${c?'開新的一班':'建立班級'}</h2>${c?'<p class="muted" style="margin:0">開新班級後，大家會從新班重新打卡。舊班資料會保留在雲端但不再顯示。</p>':''}<label for="n-name">班級名稱</label><input type="text" id="n-name" placeholder="例：飛升 1 班" maxlength="30"><div class="row"><div><label for="n-s">開始</label><input type="date" id="n-s" value="${t}"></div><div><label for="n-e">結束</label><input type="date" id="n-e" value="${addDays(t,29)}"></div></div><button class="btn rose block" data-act="newclass">${c?'開新班級':'建立班級'}</button></div>`;
   h+=`<div class="panel"><h3>使用方式</h3><p class="muted" style="margin:0">一次只跑一個班級，大約一個月。仙女們打開連結，輸入手機號碼登入，第一次先加入班級就能打卡。不用記密碼，所以沒有忘記密碼的問題。每個人只能修改自己的紀錄，團隊長可以查看與修改全班。</p></div>`;
   return h;
@@ -663,14 +780,21 @@ document.addEventListener('click',async e=>{
     const mode=Number(m.mode)||1;
     if(await guard(()=>Cloud.checkin(S.sel,d.date,entry),d.videos>=1?'打卡完成，達標！':'打卡完成')){S.draft={date:today(),videos:0,followers:'',note:''};render()}
   }
-  else if(act==='ai'){runAI()}
-  else if(act==='copy'){const r=S.ai;if(!r)return;copyText(b.dataset.k==='hook'?r.hooks[+b.dataset.i]:r.caption)}
-  else if(act==='line'){copyText(lineReport())}
+  else if(act==='myrep'){const m=S.members[myId()];if(m)copyText(myReport(m))}
+  else if(act==='sctype'){S.sc.type=b.dataset.v;if(S.scOut)S.scOut=scBuild();render()}
+  else if(act==='scpain'){S.sc.pain=b.dataset.v;const el=document.getElementById('sc-pain');if(el)el.value=b.dataset.v}
+  else if(act==='scgen'){if(!(S.sc.topic||'').trim()){toast('先寫這支要拍什麼');return}S.scOut=scBuild();render();setTimeout(()=>{const o=document.querySelector('.out');if(o)o.scrollIntoView({behavior:'smooth',block:'start'})},50)}
+  else if(act==='sccopy'){const o=S.scOut;if(!o)return;const k=b.dataset.k,i=+b.dataset.i;copyText(k==='script'?o.scriptText:k==='hook'?o.hooks[i][1]:k==='title'?o.titles[i]:o.caption)}
+  else if(act==='line'){if(S.isAdmin)copyText(lineReport())}
   else if(act==='edit'){S.editing=S.editing===b.dataset.id?null:b.dataset.id;render()}
   else if(act==='savem'){const name=v('e-name');if(!name){toast('名字不能空白');return}
     if(await guard(()=>Cloud.updateMember(b.dataset.id,{name,upline:v('e-up'),mode:+v('e-mode')||1,base:Math.max(0,Number(v('e-base'))||0)}),'已儲存')){S.editing=null;render()}}
   else if(act==='delm'){const m=S.members[b.dataset.id];if(!m||!confirm(`確定移除「${m.name}」？她在這一班的打卡紀錄會一起刪除。`))return;
     if(await guard(()=>Cloud.deleteMember(b.dataset.id),'已移除')){S.editing=null;if(S.sel===b.dataset.id)S.sel='';render()}}
+  else if(act==='rosterfill'){const el=document.getElementById('c-roster');if(!el)return;const cur=el.value.split('\n').map(x=>x.trim()).filter(Boolean);sortedMembers().forEach(m=>{if(!cur.some(n=>sameName(n,m.name)))cur.push(m.name)});el.value=cur.join('\n');toast('已帶入，記得按「儲存名單」')}
+  else if(act==='saveroster'){const el=document.getElementById('c-roster');if(!el)return;const list=[...new Set(el.value.split('\n').map(x=>x.trim()).filter(Boolean))].slice(0,80);
+    if(S.cls&&!S.cls.hasRoster){toast('請先在 Supabase 執行新增名單欄位的 SQL');return}
+    guard(()=>Cloud.saveRoster(list),'名單已儲存')}
   else if(act==='saveclass'){const name=v('c-name'),s=v('c-s'),en=v('c-e');if(!name||!s||!en||en<s){toast('請確認名稱和日期（結束要在開始之後）');return}
     guard(()=>Cloud.saveClass({name,start:s,end:en}),'已儲存班級設定')}
   else if(act==='newclass'){const name=v('n-name'),s=v('n-s'),en=v('n-e');if(!name||!s||!en||en<s){toast('請確認名稱和日期（結束要在開始之後）');return}
@@ -680,15 +804,14 @@ document.addEventListener('click',async e=>{
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.draft){S.draft[t.dataset.draft]=t.value}
-  else if(t.dataset.bind==='aiTopic'){S.aiTopic=t.value}
+  else if(t.dataset.sc){S.sc[t.dataset.sc]=t.value}
 });
 document.addEventListener('change',e=>{
   const t=e.target,k=t.dataset.bind;
   if(t.dataset.draft==='date'){S.draft.date=t.value;const m=S.members[S.sel],l=m&&m.logs&&m.logs[t.value];S.draft.videos=l?Number(l.videos)||0:0;S.draft.followers=l?l.followers:'';S.draft.note=l?l.note||'':'';t.blur();render();return}
-  if(!k||k==='aiTopic')return;
+  if(!k)return;
   S[k]=t.value;
   if(k==='sel'){const m=S.members[t.value],l=m&&m.logs&&m.logs[S.draft.date];S.draft.videos=l?Number(l.videos)||0:0;S.draft.followers=l?l.followers:'';S.draft.note=l?l.note||'':'';S.addOpen=false}
-  if(k==='guideSel')S.ai=null;
   t.blur();render();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target&&/^au-/.test(e.target.id)){const b=document.querySelector('[data-act="auth"]');if(b)b.click()}});
