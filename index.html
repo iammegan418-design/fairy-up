@@ -210,7 +210,8 @@ const num=n=>Number(n||0).toLocaleString('zh-TW');
 const sign=n=>(n>0?'+':'')+num(n);
 const today=()=>ymd(new Date());
 const LOGO=`<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="fa-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2B2452"/><stop offset=".6" stop-color="#5B4A9B"/><stop offset="1" stop-color="#E9A6C6"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#fa-bg)"/><path d="M35 29 C29 20 19 17 12 20 C18 23 26 27 35 29 Z" fill="#fff" opacity=".9"/><path d="M35 29 C28 27 20 29 15 35 C22 35 29 33 35 29 Z" fill="#fff" opacity=".6"/><path d="M33 31 C28 33 24 37 22 42 C27 40 31 36 33 31 Z" fill="#fff" opacity=".35"/><path d="M12 51 C22 49 30 41 36 30 C40 23 44 18 49 15" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/><path d="M51 6 L52.8 11.2 L58 13 L52.8 14.8 L51 20 L49.2 14.8 L44 13 L49.2 11.2 Z" fill="#FBE3A6"/><circle cx="12" cy="51" r="2.6" fill="#fff"/><path d="M27.22 52.22 26.36 52.14V56.6H25.68V53.51C25.83 53.48 25.87 53.43 25.89 53.35L25.03 53.27V56.54C24.96 56.58 24.9 56.64 24.86 56.7L25.53 57.09L25.72 56.76H27.69V57.11H27.81C28.06 57.11 28.35 56.97 28.35 56.91V53.48C28.49 53.47 28.53 53.41 28.54 53.34L27.69 53.26V56.6H27.01V52.39C27.17 52.36 27.2 52.3 27.22 52.22ZM24.73 53.7 24.48 53.6C24.69 53.26 24.87 52.86 25.04 52.44C25.17 52.44 25.23 52.39 25.26 52.33L24.33 52.04C24.11 53.13 23.65 54.25 23.21 54.95L23.27 55C23.5 54.82 23.71 54.62 23.91 54.4V57.3H24.03C24.29 57.3 24.55 57.15 24.56 57.1V53.8C24.67 53.78 24.71 53.75 24.73 53.7Z M33.78 53.11 33.38 53.62H33.25L33.3 53.23C33.42 53.23 33.5 53.19 33.52 53.1L32.54 52.89C32.53 53.14 32.52 53.38 32.49 53.62H31.36C31.53 53.15 31.68 52.71 31.78 52.42C31.95 52.42 32 52.36 32.02 52.29L31.08 52.06C31.01 52.39 30.83 53 30.61 53.62H29.27L29.32 53.78H30.56C30.36 54.32 30.15 54.86 29.99 55.21C30.49 55.38 31.03 55.61 31.55 55.89C31.06 56.43 30.32 56.88 29.23 57.21L29.27 57.28C30.57 57.07 31.45 56.69 32.05 56.17C32.6 56.49 33.09 56.85 33.42 57.21C34.01 57.47 34.77 56.6 32.47 55.74C32.89 55.19 33.1 54.53 33.23 53.78H34.33C34.42 53.78 34.48 53.75 34.5 53.69C34.22 53.45 33.78 53.11 33.78 53.11ZM31.84 55.52C31.51 55.43 31.14 55.33 30.72 55.23C30.91 54.82 31.12 54.29 31.3 53.78H32.47C32.38 54.42 32.2 55.01 31.84 55.52Z M39.53 52.4C39.46 52.56 39.34 52.83 39.23 53.03C39.15 53.01 39.04 53.01 38.94 53.02C38.92 52.91 38.9 52.8 38.89 52.69C38.99 52.68 39.07 52.64 39.11 52.61L38.52 52.17L38.23 52.48H35.34L35.39 52.64H38.3C38.38 53.57 38.68 54.36 39.53 54.71C39.79 54.83 40.13 54.88 40.25 54.66C40.32 54.54 40.27 54.41 40.11 54.25L40.14 53.65L40.08 53.64C40.03 53.81 39.96 53.98 39.9 54.1C39.87 54.16 39.85 54.17 39.76 54.14C39.31 54 39.06 53.57 38.95 53.11C39.18 53.26 39.45 53.52 39.57 53.74C40 53.91 40.21 53.23 39.45 53.06C39.62 52.98 39.79 52.9 39.9 52.84C40.01 52.86 40.06 52.84 40.09 52.8ZM39.46 54.74C39.41 54.9 39.32 55.18 39.23 55.39C39.15 55.38 39.06 55.37 38.95 55.37C38.92 55.19 38.9 55.01 38.9 54.84C39 54.82 39.08 54.79 39.11 54.75L38.52 54.31L38.23 54.62H37.81V53.01C37.94 52.99 37.97 52.94 37.99 52.86L37.17 52.78V53.17L36.48 52.78C36.21 53.14 35.61 53.64 35.06 53.93L35.1 53.99C35.39 53.93 35.68 53.84 35.95 53.73V54.62H35.02L35.07 54.78H35.95C35.95 55.64 35.81 56.59 35.02 57.24L35.07 57.3C36.32 56.76 36.56 55.71 36.58 54.78H37.17V57.3H37.29C37.53 57.3 37.81 57.15 37.81 57.09V54.78H38.3C38.37 55.86 38.65 56.78 39.54 57.17C39.81 57.32 40.14 57.38 40.28 57.16C40.34 57.05 40.3 56.91 40.14 56.73L40.18 56.07L40.12 56.07C40.06 56.25 40 56.43 39.93 56.56C39.91 56.63 39.87 56.63 39.79 56.6C39.34 56.44 39.09 55.99 38.98 55.49C39.22 55.66 39.49 55.93 39.6 56.15C40.05 56.34 40.27 55.65 39.45 55.43C39.61 55.33 39.79 55.22 39.9 55.14C40.02 55.16 40.07 55.14 40.1 55.09ZM36.58 54.62V53.78C36.72 53.76 36.77 53.7 36.78 53.63L36.3 53.59C36.54 53.48 36.74 53.37 36.91 53.26C37.03 53.28 37.11 53.27 37.17 53.24V54.62Z M43.33 52.07C42.84 52.4 41.88 52.82 41.07 53.05L41.09 53.13C41.48 53.1 41.89 53.04 42.28 52.97V54.23V54.44H40.87L40.92 54.6H42.27C42.23 55.56 42 56.49 41.04 57.24L41.09 57.3C42.58 56.65 42.88 55.58 42.93 54.6H44.15V57.3H44.28C44.52 57.3 44.82 57.14 44.82 57.06V54.6H45.99C46.07 54.6 46.13 54.57 46.14 54.51C45.9 54.29 45.48 53.96 45.48 53.96L45.12 54.44H44.82V52.34C44.97 52.32 45.01 52.26 45.02 52.18L44.15 52.1V54.44H42.93L42.94 54.23V52.84C43.2 52.77 43.44 52.71 43.64 52.64C43.81 52.7 43.93 52.68 43.99 52.63Z M49.16 53.12 49.1 53.15C49.25 53.43 49.38 53.84 49.38 54.2C49.89 54.68 50.51 53.64 49.16 53.12ZM51.36 52.47 51.01 52.92H50.34C50.67 52.8 50.75 52.19 49.7 52.07L49.65 52.11C49.79 52.28 49.92 52.57 49.92 52.83C49.97 52.87 50.02 52.9 50.07 52.92H48.75L48.8 53.08H50.72C50.68 53.37 50.57 53.96 50.45 54.36H48.55L48.59 54.52H51.93C52.01 54.52 52.07 54.49 52.08 54.43C51.84 54.21 51.44 53.9 51.44 53.9L51.09 54.36H50.57C50.88 54.07 51.21 53.69 51.38 53.47C51.5 53.48 51.57 53.42 51.59 53.36L50.74 53.08H51.84C51.92 53.08 51.98 53.05 51.99 52.99C51.75 52.77 51.36 52.47 51.36 52.47ZM49.59 56.67V55.33H50.92V56.67ZM48.99 54.92V57.25H49.1C49.4 57.25 49.59 57.15 49.59 57.11V56.83H50.92V57.2H51.03C51.34 57.2 51.55 57.09 51.55 57.06V55.38C51.67 55.36 51.72 55.32 51.76 55.27L51.19 54.84L50.9 55.18H49.65ZM46.95 52.19V57.3H47.06C47.37 57.3 47.56 57.15 47.56 57.1V55.7C47.68 55.74 47.77 55.79 47.82 55.84C47.87 55.92 47.89 56.14 47.89 56.32C48.52 56.31 48.73 55.99 48.73 55.44C48.73 54.98 48.47 54.45 47.86 54.07C48.15 53.71 48.5 53.12 48.7 52.77C48.83 52.77 48.91 52.75 48.95 52.7L48.34 52.13L48.02 52.44H47.63ZM47.56 52.61H48.06C47.98 53.05 47.83 53.71 47.72 54.08C48.03 54.46 48.16 54.88 48.16 55.28C48.16 55.46 48.11 55.56 48.04 55.6C47.99 55.63 47.97 55.64 47.91 55.64H47.56Z M54.13 52.62V53.78H53.4V52.62ZM52.83 52.46V54.21H52.93C53.22 54.21 53.4 54.08 53.4 54.04V53.93H53.55V56.33L53.28 56.39V54.64C53.37 54.63 53.41 54.58 53.42 54.53L52.8 54.48V56.48L52.49 56.54L52.75 57.24C52.81 57.22 52.86 57.16 52.9 57.09C53.81 56.68 54.46 56.35 54.9 56.11L54.89 56.04L54.13 56.21V55.15H54.8C54.88 55.15 54.94 55.13 54.95 55.06C54.79 54.87 54.48 54.59 54.48 54.59L54.21 55H54.13V54.13H54.23C54.41 54.13 54.7 54.02 54.71 53.99V52.71C54.81 52.68 54.89 52.64 54.92 52.59L54.34 52.16L54.07 52.46H53.47L52.83 52.21ZM55.31 52.04C55.21 52.92 54.94 53.82 54.62 54.41L54.69 54.45C54.83 54.34 54.96 54.21 55.08 54.07V56.58C55.08 57.03 55.24 57.14 55.83 57.14H56.52C57.57 57.14 57.83 57.01 57.83 56.75C57.83 56.64 57.78 56.58 57.6 56.51L57.57 55.95H57.51C57.43 56.21 57.34 56.42 57.29 56.5C57.25 56.54 57.19 56.55 57.12 56.56C57.03 56.56 56.81 56.57 56.57 56.57H55.93C55.69 56.57 55.64 56.53 55.64 56.41V55.1H56.1V55.33H56.19C56.35 55.33 56.63 55.23 56.63 55.19V53.9C56.72 53.88 56.79 53.84 56.82 53.81L56.3 53.41L56.05 53.68H55.72L55.45 53.57C55.55 53.41 55.65 53.23 55.74 53.03H57.04C57.01 54.62 56.98 55.32 56.84 55.46C56.8 55.5 56.76 55.52 56.67 55.52C56.57 55.52 56.33 55.51 56.18 55.5V55.57C56.36 55.61 56.49 55.67 56.56 55.76C56.62 55.84 56.64 55.98 56.63 56.16C56.9 56.16 57.12 56.09 57.27 55.93C57.52 55.67 57.58 55.04 57.6 53.12C57.72 53.1 57.79 53.07 57.83 53.02L57.28 52.56L56.98 52.87H55.8C55.87 52.71 55.93 52.55 55.98 52.38C56.11 52.38 56.17 52.33 56.2 52.25ZM55.64 53.84H56.1V54.94H55.64Z" fill="#fff"/></svg>`;
-const MODES={1:{name:'日更',desc:'每天 1 支'},2:{name:'兩日更',desc:'兩天 1 支'},3:{name:'三日更',desc:'三天 1 支'}};
+const MODES={1:{name:'日更',desc:'一週 7 支'},2:{name:'兩日更',desc:'一週 3 支'},3:{name:'三日更',desc:'一週 2 支'}};
+const modeLabel=k=>`${MODES[k].name}（${MODES[k].desc}）`;
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2200)}
 async function copyText(t){
   try{await navigator.clipboard.writeText(t);toast('已複製');return}catch(e){}
@@ -373,7 +374,8 @@ function modeOf(m){return Number(m&&m.mode)||1}
 function periodOf(m,d){return Math.floor(diff(S.cls.start,d)/7)}
 function periodRange(m,i){const s=addDays(S.cls.start,i*7);let e=addDays(s,6);if(e>S.cls.end)e=S.cls.end;return[s,e]}
 function totalPeriods(m){return S.cls?Math.ceil(totalDays()/7):0}
-function weekGoal(m,i){const[s,e]=periodRange(m,i);return Math.max(1,Math.floor((diff(s,e)+1)/modeOf(m)))}
+const WEEK_GOAL={1:7,2:3,3:2};
+function weekGoal(m,i){const[s,e]=periodRange(m,i),days=diff(s,e)+1,g=WEEK_GOAL[modeOf(m)];return days>=7?g:Math.max(1,Math.round(g*days/7))}
 function weekCount(m,i){const[s,e]=periodRange(m,i),logs=m.logs||{};let n=0;for(let x=s;x<=e;x=addDays(x,1))n+=Number(logs[x]&&logs[x].videos)||0;return n}
 function periodsDone(m){const set=new Set();if(!S.cls)return set;for(let i=0;i<totalPeriods(m);i++)if(weekCount(m,i)>=weekGoal(m,i))set.add(i);return set}
 function stats(m){
@@ -525,7 +527,7 @@ function viewCheckin(){
   }
   if(m){
     const st=stats(m),mode=Number(m.mode)||1,d=S.draft,lg=(m.logs||{})[d.date];
-    h+=`<div class="who"><span class="chip rose">${MODES[mode].name}</span>${m.upline?`<span class="chip">引路仙女：${esc(m.upline)}</span>`:''}${st.streak>1?`<span class="chip gold">連續達標 ${st.streak} 週</span>`:''}</div>`;
+    h+=`<div class="who"><span class="chip rose">${modeLabel(mode)}</span>${m.upline?`<span class="chip">引路仙女：${esc(m.upline)}</span>`:''}${st.streak>1?`<span class="chip gold">連續達標 ${st.streak} 週</span>`:''}</div>`;
     h+=`<div class="stats"><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>開班至今</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標週數</span></div><div class="stat"><b>${st.videos}</b><span>累積支數</span></div></div>`;
     h+=`<label for="d-date">打卡日期</label><input type="date" id="d-date" data-draft="date" value="${d.date}" min="${S.cls.start}" max="${t<S.cls.end?t:S.cls.end}">`;
     if(lg)h+=`<p class="muted" style="margin:6px 0 0">這天已經打過卡，送出會更新紀錄。</p>`;
@@ -676,12 +678,12 @@ function viewAll(){
   if(!ms.length)return h+`<p class="muted">還沒有成員。</p></div>`;
   ms.forEach(({m,st})=>{
     const mode=Number(m.mode)||1,TP=st.total,pct=TP?Math.round(st.allAchieved/TP*100):0,complete=st.allAchieved>=TP;
-    h+=`<div class="mcard"><div><div class="mname">${esc(m.name)}</div><div class="mmeta">${MODES[mode].name}${m.upline?`｜引路仙女 ${esc(m.upline)}`:''}｜${num(st.base)} → ${num(st.now)}</div></div><div class="mgain ${st.gain<0?'neg':''}">${sign(st.gain)}</div>
+    h+=`<div class="mcard"><div><div class="mname">${esc(m.name)}</div><div class="mmeta">${modeLabel(mode)}${m.upline?`｜引路仙女 ${esc(m.upline)}`:''}｜${num(st.base)} → ${num(st.now)}</div></div><div class="mgain ${st.gain<0?'neg':''}">${sign(st.gain)}</div>
     <div class="bar"><i style="width:${pct}%;${complete?'background:var(--mint)':''}"></i></div>
     <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${TP} 週 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
     if(S.editing===m.id&&canEdit(m)){
       h+=`<div class="editbox"><label for="e-name">名字</label><input type="text" id="e-name" value="${esc(m.name)}" maxlength="30"><label for="e-up">引路仙女</label><input type="text" id="e-up" value="${esc(m.upline||'')}" maxlength="30">
-      <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${MODES[k].name}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
+      <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${modeLabel(k)}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
       <div style="display:flex;gap:8px;margin-top:14px;justify-content:${S.isAdmin?'space-between':'flex-end'}">${S.isAdmin?`<button class="btn ghost small" data-act="delm" data-id="${m.id}">移除這位仙女</button>`:''}<button class="btn small" data-act="savem" data-id="${m.id}">儲存</button></div>
 </div>`;
     }
@@ -693,19 +695,62 @@ function viewAll(){
 const normName=x=>String(x||'').replace(/\s+/g,'').toLowerCase();
 function sameName(a,b){a=normName(a);b=normName(b);if(!a||!b)return false;if(a===b)return true;const s=a.length<b.length?a:b,l=a.length<b.length?b:a;return s.length>=2&&l.includes(s)}
 function rosterMissing(){const r=(S.cls&&S.cls.roster)||[],ms=sortedMembers();return r.filter(n=>!ms.some(m=>sameName(n,m.name)))}
+const DAILY_MSG=[
+'第一天最難，你已經開始了，這就贏過昨天的自己 ❤️',
+'不用拍得完美，先拍出來，就是最好的進度 ❤️',
+'今天也一起把執行力維持下去 ❤️',
+'還沒發的寶寶，挑一個最簡單的題目，15 秒也算數 ❤️',
+'每一支影片，都是在幫未來的自己累積 ❤️',
+'累的時候就拍日常，真實的你最有吸引力 ❤️',
+'第一週快完成了，給堅持到現在的自己拍拍手 ❤️',
+'新的一週，新的開始，一起把目標補滿 ❤️',
+'不用跟別人比，只要比上週的自己多一點 ❤️',
+'看到夥伴發影片，記得去留一句真心的話 ❤️',
+'開頭 3 秒直接講重點，今天試試看 ❤️',
+'有人看、有人留言，都是累積來的，繼續發 ❤️',
+'今天卡關的寶寶，丟到群組，大家一起幫你想 ❤️',
+'兩週了，你已經比剛開始的自己更敢說了 ❤️',
+'過半了！最難的已經過去，接下來越拍越順 ❤️',
+'把最近表現最好的一支拍成續集，觀眾會等你 ❤️',
+'今天就拍「我最近的一個小改變」吧 ❤️',
+'執行力不是靠熱情，是靠每天的小行動 ❤️',
+'還差一點的寶寶，這週還來得及，加油 ❤️',
+'持續，就是最強的天賦 ❤️',
+'第三週了，回頭看看第一支影片，你進步好多 ❤️',
+'今天記得互相留言，演算法會看見我們 ❤️',
+'不想露臉也沒關係，拍手、拍桌面、拍背影都可以 ❤️',
+'把觀眾想看的放前面，你想說的放後面 ❤️',
+'最後一週衝刺，一起完成飛升 ❤️',
+'每一個還在發的寶寶，都是團隊的榜樣 ❤️',
+'今天也是累積的一天，發完記得打卡 ❤️',
+'離結業只剩幾天，把最後幾支拍好 ❤️',
+'謝謝每一個沒有放棄的你 ❤️',
+'最後一天了！一起完成飛升 🎉',
+'恭喜每一位堅持到最後的寶寶 🎉',
+'下一班見，我們繼續飛升 🎉'
+];
+// 今天一定要發：日更今天還沒發，或「還差的支數」已經等於「這週剩下的天數」
+function mustToday(x){const mode=modeOf(x.m),need=x.k.goal-x.k.done;return need>0&&((mode===1&&!x.k.postedToday)||need>=x.k.left)}
 function lineReport(){
-  const t=today(),all=sortedMembers().map(m=>({m,k:weekInfo(m),st:stats(m)}));
+  const t=today(),wd='日一二三四五六'[parse(t).getDay()];
+  const all=sortedMembers().map(m=>({m,k:weekInfo(m),st:stats(m)}));
   const missing=rosterMissing(),total=all.length+missing.length,k0=all[0]&&all[0].k;
-  const done=all.filter(x=>x.k.done>=x.k.goal).sort((a,b)=>b.k.done-b.k.goal-(a.k.done-a.k.goal));
-  const todo=all.filter(x=>x.k.done<x.k.goal);
-  const wk=k0?`第 ${k0.w} 週（${md(k0.ws)}–${md(k0.we)}）`:'';
-  let s=`✦ ${S.cls.name}｜${wk}\n今天 ${md(t)}，本週還有 ${k0?k0.left:0} 天\n\n已達標 ${done.length} / ${total} 人\n`;
-  if(done.length)s+=`\n【已達標】\n`+done.map(x=>`・${x.m.name}（${MODES[modeOf(x.m)].name}）${x.k.done}/${x.k.goal} 支${x.k.done>x.k.goal?' 超標':''}`).join('\n')+'\n';
-  const behind=[...todo.map(x=>`${x.m.name}（${MODES[modeOf(x.m)].name}）${x.k.done}/${x.k.goal} 支，還差 ${x.k.goal-x.k.done} 支${modeOf(x.m)===1&&!x.k.postedToday?'，今天還沒發':''}`),...missing.map(n=>`${n}（還沒加入打卡）`)];
-  if(behind.length)s+=`\n以下的寶寶還需努力唷，等你跟上\n`+behind.map((x,i)=>`${i+1}. ${x}`).join('\n')+'\n';
-  if(ended()){const fin=all.filter(x=>x.st.allAchieved>=x.st.total);s+=`\n【完成飛升】${fin.length} 人${fin.length?'：'+fin.map(x=>x.m.name).join('、'):''}\n`}
+  const done=all.filter(x=>x.k.done>=x.k.goal);
+  const urgent=all.filter(x=>mustToday(x));
+  const going=all.filter(x=>x.k.done<x.k.goal&&!mustToday(x));
+  const mn=x=>MODES[modeOf(x.m)].name;
+  let s=`✨ ${S.cls.name}｜${ended()?'已結業':`第 ${dayNo()} 天 / 共 ${totalDays()} 天`}\n${md(t)}（${wd}）｜本週達標 ${done.length} / ${total} 人\n`;
+  const prog=x=>`${x.m.name}｜${mn(x)}｜${x.k.done}/${x.k.goal} 支，${x.k.done>x.k.goal?`超標 ${x.k.done-x.k.goal} 支`:x.k.done===x.k.goal?'達標':`還差 ${x.k.goal-x.k.done} 支`}${modeOf(x.m)===1?`，今天${x.k.postedToday?'已發':'還沒發'}`:''}${x.k.wgain?`｜粉絲 ${sign(x.k.wgain)}`:''}`;
+  const byNeed=(a,b)=>(a.k.goal-a.k.done)-(b.k.goal-b.k.done);
+  s+=`\n✅ 已達標（${done.length}人）\n`+(done.length?done.map(prog).join('\n'):'還沒有人，大家加油')+'\n';
+  if(going.length)s+=`\n⏳ 進行中｜${k0?md(k0.we):''} 截止（${going.length}人）\n`+going.sort(byNeed).map(prog).join('\n')+'\n';
+  if(urgent.length)s+=`\n📌 今天要完成（${urgent.length}人）\n`+urgent.sort(byNeed).map(prog).join('\n')+'\n';
+  if(missing.length)s+=`\n🙋 還沒加入打卡（${missing.length}人）\n`+missing.map(n=>`${n}｜0 支，記得先加入打卡`).join('\n')+'\n';
+  if(ended()){const fin=all.filter(x=>x.st.allAchieved>=x.st.total);s+=`\n🏆 完成飛升（${fin.length}人）${fin.length?'\n'+fin.map(x=>x.m.name).join('、'):''}\n`}
   const gain=all.reduce((a,x)=>a+x.st.gain,0);
-  s+=`\n全班累積漲粉 ${sign(gain)}`;
+  s+=`\n🚀 全班累積漲粉 ${sign(gain)}\n\n`;
+  if(urgent.length&&!ended())s+=`今天要完成的寶寶們，記得完成任務唷！\n`;
+  s+=ended()?DAILY_MSG[30]:dayNo()===totalDays()?DAILY_MSG[29]:DAILY_MSG[Math.max(0,Math.min(dayNo()-1,28))];
   return s;
 }
 
