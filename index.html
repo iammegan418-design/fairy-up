@@ -679,7 +679,7 @@ function viewScript(){
 function viewAll(){
   const ms=sortedMembers().map(m=>({m,st:stats(m)})).sort((a,b)=>b.st.gain-a.st.gain);
   const T=totalDays(),fin=ended();
-  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2>${S.isAdmin?`<button class="btn small" data-act="line">複製全班戰報</button>`:''}</div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一週都達標（日更每週 7 支、兩日更 3 支、三日更 2 支）。'}</p>`;
+  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">班級總覽</h2>${S.isAdmin?(fin?`<button class="btn small" data-act="finalrep">複製結業戰報</button>`:`<button class="btn small" data-act="line">複製全班戰報</button>`):''}</div><p class="muted" style="margin:6px 0 0">${fin?'班級已結業，下方為最終完成狀態。':'結業條件：每一週都達標（日更每週 7 支、兩日更 3 支、三日更 2 支）。'}</p>`;
   if(!ms.length)return h+`<p class="muted">還沒有成員。</p></div>`;
   ms.forEach(({m,st})=>{
     const mode=Number(m.mode)||1,TP=st.total,pct=TP?Math.round(st.allAchieved/TP*100):0,complete=st.allAchieved>=TP;
@@ -741,7 +741,7 @@ function viewAnalysis(){
   const a=classAnalysis();if(!a.n)return'';
   const fin=ended(),bar=x=>`<div class="bar"><i style="width:${Math.min(100,x.rate)}%;${x.total>=x.need?'background:var(--mint)':''}"></i></div>`;
   let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${fin?'結業分析':'期中分析'}</h2><button class="btn small" data-act="finalrep">複製${fin?'結業':'期中'}總結</button></div>
-  <p class="muted" style="margin:6px 0 0">${md(S.cls.start)}–${md(S.cls.end)}${fin?'，已結業':`，算到今天 ${md(today())}`}。應發支數＝班期天數 ÷ 模式天數（日更每天 1 支、兩日更兩天 1 支、三日更三天 1 支）。</p>
+  <p class="muted" style="margin:6px 0 0">${md(S.cls.start)}–${md(S.cls.end)}${fin?'，已結業':`，算到今天 ${md(today())}`}。目標支數＝班期天數 ÷ 模式天數，例如三日更 32 天目標 10 支，發滿 10 支就達標。</p>
   <div class="stats"><div class="stat"><b>${a.n}</b><span>參加人數</span></div><div class="stat"><b>${num(a.total)}</b><span>全班總支數</span></div><div class="stat"><b>${a.avg}</b><span>平均每人</span></div><div class="stat"><b style="color:var(--mint)">${sign(a.gain)}</b><span>全班漲粉</span></div></div>
   <div class="stats"><div class="stat"><b>${a.perfect.length}</b><span>完成飛升</span></div><div class="stat"><b>${a.done.length}</b><span>總量達標</span></div><div class="stat"><b>${a.half.length}</b><span>完成一半以上</span></div><div class="stat"><b>${a.low.length}</b><span>需要關心</span></div></div>
   <p class="muted" style="margin:4px 0 0">完成飛升＝總量達標，而且每一週都達標。</p>`;
@@ -749,15 +749,15 @@ function viewAnalysis(){
   h+=`<h3 style="margin-top:18px">重點觀察</h3><ul class="checks">${analysisInsights(a).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
   h+=`<h3 style="margin-top:18px">每個人的成績</h3>`;
   a.list.slice().sort((x,y)=>y.rate-x.rate||y.total-x.total).forEach(x=>{
-    h+=`<div class="mcard"><div><div class="mname">${esc(x.m.name)} <span class="chip ${x.total>=x.need?'mint':x.level==='low'?'':'gold'}">${LEVEL[x.level]}</span></div><div class="mmeta">${modeLabel(x.mode)}｜發了 ${x.total} 支／應發 ${x.need} 支｜達成率 ${x.rate}%</div></div><div class="mgain ${x.gain<0?'neg':''}">${sign(x.gain)}</div>${bar(x)}
+    h+=`<div class="mcard"><div><div class="mname">${esc(x.m.name)} <span class="chip ${x.total>=x.need?'mint':x.level==='low'?'':'gold'}">${LEVEL[x.level]}</span></div><div class="mmeta">${modeLabel(x.mode)}｜目標 ${x.need} 支，發了 ${x.total} 支（${x.total>x.need?`超標 ${x.total-x.need} 支`:x.total===x.need?'達標':`還差 ${x.need-x.total} 支`}）｜達成率 ${x.rate}%</div></div><div class="mgain ${x.gain<0?'neg':''}">${sign(x.gain)}</div>${bar(x)}
     <div class="mfoot"><span>達標 ${x.weeksOk}/${x.weeks.length} 週｜有發片 ${x.postDays} 天｜粉絲 ${num(x.base)} → ${num(x.now)}${x.gainPct!=null&&x.gain?`（${x.gain>0?'+':''}${x.gainPct}%）`:''}</span></div></div>`;
   });
   return h+`</div>`;
 }
 function finalReport(){
   const a=classAnalysis(),fin=ended(),ins=analysisInsights(a);
-  const line=x=>`${x.m.name}｜${x.mode===1?'日更':MODES[x.mode].name}｜${x.total}/${x.need} 支（${x.rate}%）${x.gain?`｜粉絲 ${sign(x.gain)}`:''}`;
-  let s=`✨ ${S.cls.name}｜${fin?'結業總結':'期中總結'}\n${md(S.cls.start)}–${md(S.cls.end)}${fin?'':`（算到 ${md(today())}）`}\n\n・參加人數：${a.n} 人\n・全班總支數：${num(a.total)} 支（平均每人 ${a.avg} 支）\n・全班漲粉：${sign(a.gain)}\n`;
+  const line=x=>`${x.m.name}｜${MODES[x.mode].name}｜目標 ${x.need} 支，發了 ${x.total} 支（${x.total>x.need?`超標 ${x.total-x.need} 支`:x.total===x.need?'達標':`還差 ${x.need-x.total} 支`}）${x.gain?`｜粉絲 ${sign(x.gain)}`:''}`;
+  let s=`✨ ${S.cls.name}｜${fin?'結業總結':'期中總結'}\n${md(S.cls.start)}–${md(S.cls.end)}${fin?'':`（算到 ${md(today())}）`}\n\n・參加人數：${a.n} 人\n・全班總支數：${num(a.total)} 支（平均每人 ${a.avg} 支）\n・全班漲粉：${sign(a.gain)}\n・目標：${a.list.length?Math.max(...a.list.map(x=>x.days)):0} 天內，日更 ${Math.floor((a.list[0]?a.list[0].days:0)/1)} 支、兩日更 ${Math.floor((a.list[0]?a.list[0].days:0)/2)} 支、三日更 ${Math.floor((a.list[0]?a.list[0].days:0)/3)} 支\n`;
   if(a.wk.length)s+=`\n【每週全班支數】\n`+a.wk.map(w=>`第 ${w.i+1} 週（${md(w.ws)}–${md(w.we)}）${w.n} 支，${w.ok} 人達標`).join('\n')+'\n';
   const sec=(t,arr)=>arr.length?`\n【${t}】${arr.length} 人\n`+arr.sort((x,y)=>y.rate-x.rate).map(line).join('\n')+'\n':'';
   s+=sec('🏆 完成飛升',a.perfect)+sec('✅ 總量達標',a.done)+sec('💪 完成一半以上',a.half)+sec('🌱 下一班再加油',a.low);
