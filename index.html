@@ -131,6 +131,11 @@ textarea{min-height:70px;resize:vertical}
 .hook{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line)}
 .hook:last-child{border-bottom:0}
 .pre{white-space:pre-wrap}
+.wkrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:8px}
+.wk{background:var(--lav,rgba(120,100,200,.08));border-radius:12px;padding:10px;display:grid;gap:2px;text-align:center}
+.wk b{font-size:1.3rem;font-variant-numeric:tabular-nums}
+.wk span{font-weight:700;font-size:.85rem}
+.wk small{color:var(--soft);font-size:.72rem}
 .myrep{margin-top:14px;padding:14px;border-radius:14px;background:var(--rose-soft);display:grid;gap:10px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chipbtn{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;font-size:.82rem;cursor:pointer}
@@ -528,7 +533,7 @@ function viewCheckin(){
   if(m){
     const st=stats(m),mode=Number(m.mode)||1,d=S.draft,lg=(m.logs||{})[d.date];
     h+=`<div class="who"><span class="chip rose">${modeLabel(mode)}</span>${m.upline?`<span class="chip">引路仙女：${esc(m.upline)}</span>`:''}${st.streak>1?`<span class="chip gold">連續達標 ${st.streak} 週</span>`:''}</div>`;
-    h+=`<div class="stats"><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>開班至今</span></div><div class="stat"><b>${st.achieved}/${st.elapsed}</b><span>達標週數</span></div><div class="stat"><b>${st.videos}</b><span>累積支數</span></div></div>`;
+    h+=`<div class="stats"><div class="stat"><b>${num(st.now)}</b><span>目前粉絲</span></div><div class="stat"><b style="color:var(--mint)">${sign(st.gain)}</b><span>開班至今</span></div><div class="stat"><b>${weekInfo(m).done}/${weekInfo(m).goal}</b><span>本週進度（支）</span></div><div class="stat"><b>${st.videos}</b><span>累積支數</span></div></div>`;
     h+=`<label for="d-date">打卡日期</label><input type="date" id="d-date" data-draft="date" value="${d.date}" min="${S.cls.start}" max="${t<S.cls.end?t:S.cls.end}">`;
     if(lg)h+=`<p class="muted" style="margin:6px 0 0">這天已經打過卡，送出會更新紀錄。</p>`;
     h+=`<label>這天發了幾支短影音</label><div class="stepper"><button type="button" data-act="vid" data-v="-1" aria-label="減少">−</button><output>${d.videos}</output><button type="button" data-act="vid" data-v="1" aria-label="增加">＋</button>${goalHint(m,d)}</div>`;
@@ -680,7 +685,7 @@ function viewAll(){
     const mode=Number(m.mode)||1,TP=st.total,pct=TP?Math.round(st.allAchieved/TP*100):0,complete=st.allAchieved>=TP;
     h+=`<div class="mcard"><div><div class="mname">${esc(m.name)}</div><div class="mmeta">${modeLabel(mode)}${m.upline?`｜引路仙女 ${esc(m.upline)}`:''}｜${num(st.base)} → ${num(st.now)}</div></div><div class="mgain ${st.gain<0?'neg':''}">${sign(st.gain)}</div>
     <div class="bar"><i style="width:${pct}%;${complete?'background:var(--mint)':''}"></i></div>
-    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 達標 ${st.allAchieved}/${TP} 週 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
+    <div class="mfoot"><span>${fin?(complete?'<span class="chip mint">完成飛升</span>':`<span class="chip">未完成</span>`):''} 本週 ${weekInfo(m).done}/${weekInfo(m).goal} 支｜達標 ${st.allAchieved}/${TP} 週 ${st.today?'｜今日已打卡':''}</span>${canEdit(m)?`<button class="linkbtn" data-act="edit" data-id="${m.id}">${S.editing===m.id?'收起':'編輯'}</button>`:''}</div>`;
     if(S.editing===m.id&&canEdit(m)){
       h+=`<div class="editbox"><label for="e-name">名字</label><input type="text" id="e-name" value="${esc(m.name)}" maxlength="30"><label for="e-up">引路仙女</label><input type="text" id="e-up" value="${esc(m.upline||'')}" maxlength="30">
       <div class="row"><div><label for="e-mode">更新模式</label><select id="e-mode">${[1,2,3].map(k=>`<option value="${k}"${mode===k?' selected':''}>${modeLabel(k)}</option>`).join('')}</select></div><div><label for="e-base">起始粉絲</label><input type="number" id="e-base" value="${esc(m.base)}"></div></div>
@@ -689,7 +694,78 @@ function viewAll(){
     }
     h+=`</div>`;
   });
+  return h+`</div>`+(S.isAdmin?viewAnalysis():'');
+}
+/* --- 結業分析：整個班期每個人發了幾支、有沒有做到自己選的目標 --- */
+// 應發支數＝班期天數 ÷ 模式天數（日更每天 1 支、兩日更兩天 1 支、三日更三天 1 支）
+function finalStats(m){
+  const t=today(),end=t<S.cls.end?t:S.cls.end,days=Math.max(0,diff(S.cls.start,end)+1),logs=m.logs||{},mode=modeOf(m);
+  let total=0,postDays=0,run=0,best=0;
+  for(let i=0;i<days;i++){const d=addDays(S.cls.start,i),v=Number(logs[d]&&logs[d].videos)||0;total+=v;if(v>0){postDays++;run++;if(run>best)best=run}else run=0}
+  const need=Math.max(1,Math.floor(days/mode)),rate=Math.round(total/need*100);
+  const weeks=[];for(let i=0;i<totalPeriods(m);i++){const[ws]=periodRange(m,i);if(ws>end)break;weeks.push({i,n:weekCount(m,i),g:weekGoal(m,i)})}
+  const weeksOk=weeks.filter(w=>w.n>=w.g).length;
+  const st=stats(m),base=st.base,now=st.now,gainPct=base>0?Math.round((now-base)/base*1000)/10:null;
+  const level=total>=need?(weeksOk===weeks.length?'perfect':'done'):rate>=50?'half':'low';
+  return{m,mode,days,total,need,rate,postDays,best,weeks,weeksOk,base,now,gain:now-base,gainPct,level};
+}
+const LEVEL={perfect:'完成飛升',done:'總量達標',half:'完成一半以上',low:'需要關心'};
+function classAnalysis(){
+  const list=sortedMembers().map(finalStats);
+  const n=list.length,total=list.reduce((a,x)=>a+x.total,0),gain=list.reduce((a,x)=>a+x.gain,0);
+  const by=k=>list.filter(x=>x.level===k);
+  const modes=[1,2,3].map(k=>{const g=list.filter(x=>x.mode===k);return{k,n:g.length,avg:g.length?Math.round(g.reduce((a,x)=>a+Math.min(x.rate,999),0)/g.length):0}}).filter(x=>x.n);
+  const wk=[];if(list[0])list[0].weeks.forEach((w,i)=>{const[ws,we]=periodRange(null,i);wk.push({i,ws,we,n:list.reduce((a,x)=>a+(x.weeks[i]?x.weeks[i].n:0),0),ok:list.filter(x=>x.weeks[i]&&x.weeks[i].n>=x.weeks[i].g).length})});
+  const top=(arr,f,k=3)=>arr.slice().sort((a,b)=>f(b)-f(a)).filter(x=>f(x)>0).slice(0,k);
+  const reached=list.filter(x=>x.total>=x.need),notReached=list.filter(x=>x.total<x.need);
+  const avgGain=a=>a.length?Math.round(a.reduce((s,x)=>s+x.gain,0)/a.length):0;
+  return{list,n,total,gain,avg:n?Math.round(total/n*10)/10:0,perfect:by('perfect'),done:by('done'),half:by('half'),low:by('low'),modes,wk,
+    topVideos:top(list,x=>x.total),topGain:top(list,x=>x.gain),topRate:top(list,x=>x.rate),
+    gainReached:avgGain(reached),gainNot:avgGain(notReached),nReached:reached.length};
+}
+function analysisInsights(a){
+  const out=[];
+  const full=a.wk.filter(w=>diff(w.ws,w.we)>=6);
+  if(full.length>1){const best=full.slice().sort((x,y)=>y.n-x.n)[0],worst=full.slice().sort((x,y)=>x.n-y.n)[0];
+    out.push(`完整的週裡，全班發最多的是第 ${best.i+1} 週（${best.n} 支），最少的是第 ${worst.i+1} 週（${worst.n} 支）。`);}
+  if(a.wk.length>1){
+    const first=a.wk[0].n,last=a.wk[a.wk.length-1];const lastFull=a.wk.length>1&&diff(last.ws,last.we)<6?a.wk[a.wk.length-2]:last;
+    if(lastFull.n<first)out.push(`第 1 週 ${first} 支，到第 ${lastFull.i+1} 週剩 ${lastFull.n} 支，後段比較容易鬆掉，下一班可以在第 3 週加一個小活動拉回來。`);
+    else out.push(`從第 1 週 ${first} 支到第 ${lastFull.i+1} 週 ${lastFull.n} 支，大家的節奏有維持住。`);}
+  if(a.nReached&&a.nReached<a.n)out.push(`總量達標的人平均漲粉 ${sign(a.gainReached)}，沒達標的人平均 ${sign(a.gainNot)}。${a.gainReached>a.gainNot?'穩定發片的人，粉絲成長比較明顯。':'這班粉絲成長和發片量的關係不明顯，可以再看內容主題。'}`);
+  if(a.modes.length>1){const m=a.modes.slice().sort((x,y)=>y.avg-x.avg);out.push(`平均達成率：${m.map(x=>`${MODES[x.k].name} ${x.avg}%`).join('、')}。${MODES[m[0].k].name}的夥伴做得最穩。`)}
+  if(a.low.length)out.push(`有 ${a.low.length} 位達成率不到一半，建議私下關心，下一班可以先從比較輕鬆的模式開始。`);
+  return out;
+}
+function viewAnalysis(){
+  const a=classAnalysis();if(!a.n)return'';
+  const fin=ended(),bar=x=>`<div class="bar"><i style="width:${Math.min(100,x.rate)}%;${x.total>=x.need?'background:var(--mint)':''}"></i></div>`;
+  let h=`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${fin?'結業分析':'期中分析'}</h2><button class="btn small" data-act="finalrep">複製${fin?'結業':'期中'}總結</button></div>
+  <p class="muted" style="margin:6px 0 0">${md(S.cls.start)}–${md(S.cls.end)}${fin?'，已結業':`，算到今天 ${md(today())}`}。應發支數＝班期天數 ÷ 模式天數（日更每天 1 支、兩日更兩天 1 支、三日更三天 1 支）。</p>
+  <div class="stats"><div class="stat"><b>${a.n}</b><span>參加人數</span></div><div class="stat"><b>${num(a.total)}</b><span>全班總支數</span></div><div class="stat"><b>${a.avg}</b><span>平均每人</span></div><div class="stat"><b style="color:var(--mint)">${sign(a.gain)}</b><span>全班漲粉</span></div></div>
+  <div class="stats"><div class="stat"><b>${a.perfect.length}</b><span>完成飛升</span></div><div class="stat"><b>${a.done.length}</b><span>總量達標</span></div><div class="stat"><b>${a.half.length}</b><span>完成一半以上</span></div><div class="stat"><b>${a.low.length}</b><span>需要關心</span></div></div>
+  <p class="muted" style="margin:4px 0 0">完成飛升＝總量達標，而且每一週都達標。</p>`;
+  if(a.wk.length)h+=`<h3 style="margin-top:18px">每週全班支數</h3><div class="wkrow">${a.wk.map(w=>`<div class="wk"><b>${w.n}</b><span>第 ${w.i+1} 週</span><small>${md(w.ws)}–${md(w.we)}</small><small>${w.ok}/${a.n} 人達標</small></div>`).join('')}</div>`;
+  h+=`<h3 style="margin-top:18px">重點觀察</h3><ul class="checks">${analysisInsights(a).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+  h+=`<h3 style="margin-top:18px">每個人的成績</h3>`;
+  a.list.slice().sort((x,y)=>y.rate-x.rate||y.total-x.total).forEach(x=>{
+    h+=`<div class="mcard"><div><div class="mname">${esc(x.m.name)} <span class="chip ${x.total>=x.need?'mint':x.level==='low'?'':'gold'}">${LEVEL[x.level]}</span></div><div class="mmeta">${modeLabel(x.mode)}｜發了 ${x.total} 支／應發 ${x.need} 支｜達成率 ${x.rate}%</div></div><div class="mgain ${x.gain<0?'neg':''}">${sign(x.gain)}</div>${bar(x)}
+    <div class="mfoot"><span>達標 ${x.weeksOk}/${x.weeks.length} 週｜有發片 ${x.postDays} 天｜粉絲 ${num(x.base)} → ${num(x.now)}${x.gainPct!=null&&x.gain?`（${x.gain>0?'+':''}${x.gainPct}%）`:''}</span></div></div>`;
+  });
   return h+`</div>`;
+}
+function finalReport(){
+  const a=classAnalysis(),fin=ended(),ins=analysisInsights(a);
+  const line=x=>`${x.m.name}｜${x.mode===1?'日更':MODES[x.mode].name}｜${x.total}/${x.need} 支（${x.rate}%）${x.gain?`｜粉絲 ${sign(x.gain)}`:''}`;
+  let s=`✨ ${S.cls.name}｜${fin?'結業總結':'期中總結'}\n${md(S.cls.start)}–${md(S.cls.end)}${fin?'':`（算到 ${md(today())}）`}\n\n・參加人數：${a.n} 人\n・全班總支數：${num(a.total)} 支（平均每人 ${a.avg} 支）\n・全班漲粉：${sign(a.gain)}\n`;
+  if(a.wk.length)s+=`\n【每週全班支數】\n`+a.wk.map(w=>`第 ${w.i+1} 週（${md(w.ws)}–${md(w.we)}）${w.n} 支，${w.ok} 人達標`).join('\n')+'\n';
+  const sec=(t,arr)=>arr.length?`\n【${t}】${arr.length} 人\n`+arr.sort((x,y)=>y.rate-x.rate).map(line).join('\n')+'\n':'';
+  s+=sec('🏆 完成飛升',a.perfect)+sec('✅ 總量達標',a.done)+sec('💪 完成一半以上',a.half)+sec('🌱 下一班再加油',a.low);
+  if(a.topGain.length)s+=`\n【漲粉前三名】\n`+a.topGain.map((x,i)=>`${i+1}. ${x.m.name} ${sign(x.gain)}`).join('\n')+'\n';
+  if(a.topVideos.length)s+=`\n【發片最多】\n`+a.topVideos.map((x,i)=>`${i+1}. ${x.m.name} ${x.total} 支`).join('\n')+'\n';
+  if(ins.length)s+=`\n【觀察】\n`+ins.map(x=>`・${x}`).join('\n')+'\n';
+  s+=`\n謝謝每一位一起飛升的寶寶 ❤️`;
+  return s;
 }
 // 群組名單比對：名字互相包含就算同一人（例：名單「邱婉婷」對到打卡名字「婉婷」）
 const normName=x=>String(x||'').replace(/\s+/g,'').toLowerCase();
@@ -826,6 +902,7 @@ document.addEventListener('click',async e=>{
   else if(act==='scpain'){S.sc.pain=b.dataset.v;const el=document.getElementById('sc-pain');if(el)el.value=b.dataset.v}
   else if(act==='scgen'){if(!(S.sc.topic||'').trim()){toast('先寫這支要拍什麼');return}S.scOut=scBuild();render();setTimeout(()=>{const o=document.querySelector('.out');if(o)o.scrollIntoView({behavior:'smooth',block:'start'})},50)}
   else if(act==='sccopy'){const o=S.scOut;if(!o)return;const k=b.dataset.k,i=+b.dataset.i;copyText(k==='script'?o.scriptText:k==='hook'?o.hooks[i][1]:k==='title'?o.titles[i]:o.caption)}
+  else if(act==='finalrep'){if(S.isAdmin)copyText(finalReport())}
   else if(act==='line'){if(S.isAdmin)copyText(lineReport())}
   else if(act==='edit'){S.editing=S.editing===b.dataset.id?null:b.dataset.id;render()}
   else if(act==='savem'){const name=v('e-name');if(!name){toast('名字不能空白');return}
